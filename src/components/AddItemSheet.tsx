@@ -1,4 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import {
+  categoryLabel,
+  detectCategoryFromName,
+} from '../lib/detectCategory'
 import { CATEGORIES, type CategoryId } from '../types'
 import { useShopStore } from '../store/useShopStore'
 
@@ -35,6 +39,8 @@ export function AddItemSheet({
   const [quantity, setQuantity] = useState('')
   const [notes, setNotes] = useState('')
   const [category, setCategory] = useState<CategoryId>('other')
+  /** Once user picks a category manually, stop overwriting while they type. */
+  const [categoryLocked, setCategoryLocked] = useState(false)
   const [brand, setBrand] = useState('')
   const [barcode, setBarcode] = useState('')
   const [sizeLabel, setSizeLabel] = useState('')
@@ -46,12 +52,18 @@ export function AddItemSheet({
 
   useEffect(() => {
     if (!open) return
-    setName(initialPrefill?.name ?? '')
+    const prefillName = initialPrefill?.name ?? ''
+    const prefillCat =
+      initialPrefill?.category ??
+      (prefillName ? detectCategoryFromName(prefillName) : 'other')
+    setName(prefillName)
     setBrand(initialPrefill?.brand ?? '')
     setBarcode(initialPrefill?.barcode ?? '')
     setSizeLabel(initialPrefill?.sizeLabel ?? '')
     setImageUrl(initialPrefill?.imageUrl ?? '')
-    setCategory(initialPrefill?.category ?? 'other')
+    setCategory(prefillCat)
+    // Lock if barcode / OFF already chose a non-other category
+    setCategoryLocked(Boolean(initialPrefill?.category && initialPrefill.category !== 'other'))
     setQuantity('')
     setNotes('')
     setAddToWeekFlag(defaultAddToWeek)
@@ -66,6 +78,16 @@ export function AddItemSheet({
       .slice(0, 6)
   }, [name, masterItems])
 
+  const detected = useMemo(() => detectCategoryFromName(name), [name])
+  const autoActive = !categoryLocked && name.trim().length > 0 && detected !== 'other'
+
+  const onNameChange = (value: string) => {
+    setName(value)
+    if (!categoryLocked) {
+      setCategory(detectCategoryFromName(value))
+    }
+  }
+
   if (!open) return null
 
   const submit = () => {
@@ -73,9 +95,15 @@ export function AddItemSheet({
       setHint('Enter a product name')
       return
     }
+    // Final pass if user never locked and never typed enough earlier
+    const finalCategory = categoryLocked
+      ? category
+      : detectCategoryFromName(name) !== 'other'
+        ? detectCategoryFromName(name)
+        : category
     addMasterItem({
       name,
-      category,
+      category: finalCategory,
       brand: brand || undefined,
       barcode: barcode || undefined,
       sizeLabel: sizeLabel || undefined,
@@ -167,10 +195,15 @@ export function AddItemSheet({
         <input
           autoFocus
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => onNameChange(e.target.value)}
           placeholder="e.g. Milk, bananas…"
           className="mb-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none ring-teal-600 focus:ring-2 dark:border-slate-700 dark:bg-slate-800"
         />
+        {autoActive ? (
+          <p className="mb-2 text-xs font-medium text-teal-700 dark:text-teal-300">
+            Auto category: {categoryLabel(detected)}
+          </p>
+        ) : null}
 
         {suggestions.length > 0 && (
           <ul className="mb-3 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -215,7 +248,10 @@ export function AddItemSheet({
             </label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as CategoryId)}
+              onChange={(e) => {
+                setCategory(e.target.value as CategoryId)
+                setCategoryLocked(true)
+              }}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-base outline-none ring-teal-600 focus:ring-2 dark:border-slate-700 dark:bg-slate-800"
             >
               {CATEGORIES.map((c) => (
@@ -224,6 +260,18 @@ export function AddItemSheet({
                 </option>
               ))}
             </select>
+            {categoryLocked ? (
+              <button
+                type="button"
+                className="mt-1 text-left text-[11px] font-semibold text-teal-700 dark:text-teal-300"
+                onClick={() => {
+                  setCategoryLocked(false)
+                  setCategory(detectCategoryFromName(name))
+                }}
+              >
+                Use auto-detect again
+              </button>
+            ) : null}
           </div>
         </div>
 
