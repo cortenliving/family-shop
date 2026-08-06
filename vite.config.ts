@@ -42,6 +42,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        importScripts: ['sw-push.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/world\.openfoodfacts\.org\/.*/i,
@@ -53,6 +54,15 @@ export default defineConfig({
                 maxAgeSeconds: 60 * 60 * 24 * 30,
               },
               cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/family-shop-api\..*\.workers\.dev\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'family-shop-api',
+              networkTimeoutSeconds: 8,
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 },
             },
           },
         ],

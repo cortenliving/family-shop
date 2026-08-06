@@ -16,8 +16,20 @@ export function WeekView() {
   const clearChecked = useShopStore((s) => s.clearChecked)
   const clearCurrentList = useShopStore((s) => s.clearCurrentList)
   const addToWeek = useShopStore((s) => s.addToWeek)
+  const addUsualShop = useShopStore((s) => s.addUsualShop)
   const setTab = useShopStore((s) => s.setTab)
   const [addOpen, setAddOpen] = useState(false)
+
+  const frequentCount = useMemo(
+    () => masterItems.filter((m) => m.frequent).length,
+    [masterItems],
+  )
+  const frequentMissing = useMemo(() => {
+    const onList = new Set(
+      shoppingItems.filter((s) => !s.checked).map((s) => s.masterItemId),
+    )
+    return masterItems.filter((m) => m.frequent && !onList.has(m.id)).length
+  }, [masterItems, shoppingItems])
 
   const masterById = useMemo(() => {
     const map = new Map(masterItems.map((m) => [m.id, m]))
@@ -71,6 +83,24 @@ export function WeekView() {
         </div>
 
         <SharingBanner compact />
+
+        {frequentCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => addUsualShop()}
+            disabled={frequentMissing === 0}
+            className={`mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold active:scale-[0.99] ${
+              frequentMissing === 0
+                ? 'bg-slate-100 text-slate-400 dark:bg-slate-800'
+                : 'bg-amber-100 text-amber-950 ring-1 ring-amber-300 dark:bg-amber-950/50 dark:text-amber-50 dark:ring-amber-800'
+            }`}
+          >
+            <span aria-hidden>★</span>
+            {frequentMissing === 0
+              ? 'Usual shop already on the list'
+              : `Usual shop · add ${frequentMissing} frequent item${frequentMissing === 1 ? '' : 's'}`}
+          </button>
+        ) : null}
 
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <FilterChip

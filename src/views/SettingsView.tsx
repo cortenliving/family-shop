@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
 import { SharingStatusCard } from '../components/SharingStatus'
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  getPushPermission,
+  isPushSubscribed,
+  pushSupported,
+  vapidConfigured,
+} from '../lib/push'
 import { hasRemoteApi } from '../lib/sync'
 import { useShopStore } from '../store/useShopStore'
 
@@ -26,12 +34,30 @@ export function SettingsView() {
   // Local draft so clearing "Me" to type "Kane" is not fought by the store
   const [nameDraft, setNameDraft] = useState(member?.displayName ?? 'Me')
   const [nameDirty, setNameDirty] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushOn, setPushOn] = useState(false)
+  const [pushHint, setPushHint] = useState('')
 
   useEffect(() => {
     if (!nameDirty && member?.displayName != null) {
       setNameDraft(member.displayName)
     }
   }, [member?.displayName, nameDirty])
+
+  useEffect(() => {
+    void (async () => {
+      if (!pushSupported() || !vapidConfigured()) {
+        setPushOn(false)
+        return
+      }
+      const perm = await getPushPermission()
+      if (perm !== 'granted') {
+        setPushOn(false)
+        return
+      }
+      setPushOn(await isPushSubscribed())
+    })()
+  }, [family?.id])
 
   const commitName = () => {
     const next = nameDraft.trim() || 'Me'
@@ -66,21 +92,28 @@ export function SettingsView() {
     }
   }
 
-  const requestNotify = async () => {
-    if (!('Notification' in window)) {
-      showToast('Notifications not supported on this device')
+  const enablePush = async () => {
+    if (!family) {
+      showToast('Join a family first')
       return
     }
-    const perm = await Notification.requestPermission()
-    if (perm === 'granted') {
-      showToast('Notifications enabled')
-      if (weeklyReminder) {
-        // Lightweight local reminder registration note
-        showToast('Weekly reminder preference saved (local)')
-      }
-    } else {
-      showToast('Notification permission denied')
-    }
+    setPushBusy(true)
+    setPushHint('')
+    const result = await enablePushNotifications(family.id, member?.id)
+    setPushBusy(false)
+    setPushHint(result.message)
+    showToast(result.message)
+    if (result.ok) setPushOn(true)
+  }
+
+  const disablePush = async () => {
+    if (!family) return
+    setPushBusy(true)
+    await disablePushNotifications(family.id)
+    setPushBusy(false)
+    setPushOn(false)
+    setPushHint('Push turned off on this device')
+    showToast('Push turned off on this device')
   }
 
   return (
@@ -272,10 +305,62 @@ export function SettingsView() {
           Notifications
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          Push when family members change the list works best with the Cloudflare
-          worker + web push keys. You can enable browser notifications and a local weekly reminder preference here.
+          Get a ping when someone adds items, checks things off, or starts the
+          usual shop. On iPhone you must use the <strong>Add to Home Screen</strong>{' '}
+          app (not plain Safari tabs).
         </p>
-        <label className="mt-3 flex min-h-12 items-center justify-between gap-3">
+
+        {!family ? (
+          <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+            Join a family first to enable shared push.
+          </p>
+        ) : !pushSupported() ? (
+          <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+            This browser doesn’t support Web Push. On iPhone: Share → Add to Home
+            Screen, then open Family Shop from the icon.
+          </p>
+        ) : !vapidConfigured() || !hasRemoteApi() ? (
+          <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+            Cloud push isn’t configured for this build.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-3 dark:bg-slate-800/60">
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Family list alerts
+                </p>
+                <p className="text-xs text-slate-500">
+                  {pushOn ? 'On for this device' : 'Off on this device'}
+                </p>
+              </div>
+              {pushOn ? (
+                <button
+                  type="button"
+                  disabled={pushBusy}
+                  onClick={() => void disablePush()}
+                  className="min-h-11 rounded-xl bg-slate-200 px-4 text-sm font-bold dark:bg-slate-700"
+                >
+                  Turn off
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={pushBusy}
+                  onClick={() => void enablePush()}
+                  className="min-h-11 rounded-xl bg-teal-600 px-4 text-sm font-bold text-white"
+                >
+                  {pushBusy ? '…' : 'Turn on'}
+                </button>
+              )}
+            </div>
+            {pushHint ? (
+              <p className="text-xs text-slate-500">{pushHint}</p>
+            ) : null}
+          </div>
+        )}
+
+        <label className="mt-4 flex min-h-12 items-center justify-between gap-3">
           <span className="text-sm font-medium">Weekly “make the list” reminder</span>
           <input
             type="checkbox"
@@ -284,13 +369,9 @@ export function SettingsView() {
             onChange={(e) => setWeeklyReminder(e.target.checked)}
           />
         </label>
-        <button
-          type="button"
-          onClick={() => void requestNotify()}
-          className="mt-2 min-h-12 w-full rounded-2xl bg-slate-100 font-semibold dark:bg-slate-800"
-        >
-          Enable browser notifications
-        </button>
+        <p className="text-xs text-slate-400">
+          Preference saved on this device (local). Full scheduled push coming later.
+        </p>
       </section>
 
       <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">

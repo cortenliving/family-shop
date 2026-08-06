@@ -14,5 +14,8 @@
     "@cloudflare/workers-types": "^4.20250317.0",
     "typescript": "^5.8.2",
     "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
   }
 }

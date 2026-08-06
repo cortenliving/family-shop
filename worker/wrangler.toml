@@ -23,3 +23,6 @@ new_sqlite_classes = ["FamilyRoom"]
 
 [vars]
 APP_NAME = "FamilyShop"
+VAPID_PUBLIC_KEY = "BAboBm4lZ0cU_FQ1IzBbWgjoy5BjhUj2Roc1YZJAnPEZhp23KbdD9fhCGRetreuWqfsKzzn17NnG4yHJWy6Th-E"
+# VAPID_PRIVATE_KEY set via: npx wrangler secret put VAPID_PRIVATE_KEY
+VAPID_SUBJECT = "mailto:cortenliving@gmail.com"

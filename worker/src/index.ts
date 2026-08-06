@@ -1,9 +1,13 @@
 import { lookupProduct } from './productLookup'
+import { sendWebPush } from './webpush'
 
 export interface Env {
   DB: D1Database
   FAMILY_ROOM: DurableObjectNamespace
   APP_NAME: string
+  VAPID_PUBLIC_KEY?: string
+  VAPID_PRIVATE_KEY?: string
+  VAPID_SUBJECT?: string
 }
 
 type MasterRow = {
@@ -211,7 +215,19 @@ export default {
       }
 
       if (path === '/api/health') {
-        return json({ ok: true, app: env.APP_NAME })
+        return json({
+          ok: true,
+          app: env.APP_NAME,
+          push: Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY),
+        })
+      }
+
+      // Public VAPID key for client push subscribe
+      if (path === '/api/push/vapid-public-key' && request.method === 'GET') {
+        if (!env.VAPID_PUBLIC_KEY) {
+          return json({ error: 'Push not configured' }, 503)
+        }
+        return json({ publicKey: env.VAPID_PUBLIC_KEY })
       }
 
       // Product barcode lookup (proxied so we can send a proper User-Agent
@@ -257,6 +273,56 @@ export default {
         await upsertMember(env.DB, family.id, body.member)
         const bundle = await loadFamilyBundle(env.DB, family.id)
         return json(bundle)
+      }
+
+      // --- Web Push subscribe / unsubscribe ---
+      const pushSubMatch = path.match(/^\/api\/families\/([^/]+)\/push\/subscribe$/)
+      if (pushSubMatch && request.method === 'POST') {
+        const familyId = pushSubMatch[1]!
+        const body = (await request.json()) as {
+          memberId?: string
+          subscription?: {
+            endpoint?: string
+            keys?: { p256dh?: string; auth?: string }
+          }
+        }
+        const endpoint = body.subscription?.endpoint
+        const p256dh = body.subscription?.keys?.p256dh
+        const auth = body.subscription?.keys?.auth
+        if (!endpoint || !p256dh || !auth) {
+          return json({ error: 'Invalid subscription' }, 400)
+        }
+        const family = await env.DB.prepare('SELECT id FROM families WHERE id = ?')
+          .bind(familyId)
+          .first()
+        if (!family) return json({ error: 'Not found' }, 404)
+        const now = Date.now()
+        await env.DB.prepare(
+          `INSERT INTO push_subscriptions (endpoint, family_id, member_id, p256dh, auth, created_at, last_seen_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(endpoint) DO UPDATE SET
+             family_id = excluded.family_id,
+             member_id = excluded.member_id,
+             p256dh = excluded.p256dh,
+             auth = excluded.auth,
+             last_seen_at = excluded.last_seen_at`,
+        )
+          .bind(endpoint, familyId, body.memberId ?? null, p256dh, auth, now, now)
+          .run()
+        return json({ ok: true })
+      }
+
+      const pushUnsubMatch = path.match(
+        /^\/api\/families\/([^/]+)\/push\/unsubscribe$/,
+      )
+      if (pushUnsubMatch && request.method === 'POST') {
+        const body = (await request.json()) as { endpoint?: string }
+        if (body.endpoint) {
+          await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')
+            .bind(body.endpoint)
+            .run()
+        }
+        return json({ ok: true })
       }
 
       // Heartbeat / register presence for a member
@@ -320,6 +386,11 @@ export default {
             addedAt: number
             addedBy?: string
           }>
+          notify?: {
+            title?: string
+            body?: string
+            excludeMemberId?: string
+          }
         }
 
         // Ensure family row exists
@@ -393,6 +464,51 @@ export default {
         }
 
         await broadcast(env, familyId)
+
+        // Fan-out Web Push to other devices in the family
+        if (body.notify?.title && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
+          const subs = await env.DB.prepare(
+            'SELECT endpoint, p256dh, auth, member_id FROM push_subscriptions WHERE family_id = ?',
+          )
+            .bind(familyId)
+            .all<{
+              endpoint: string
+              p256dh: string
+              auth: string
+              member_id: string | null
+            }>()
+
+          const payload = JSON.stringify({
+            title: body.notify.title,
+            body: body.notify.body || 'Shopping list updated',
+            url: '/',
+            tag: 'family-shop-list',
+          })
+
+          const exclude = body.notify.excludeMemberId
+          for (const sub of subs.results ?? []) {
+            if (exclude && sub.member_id === exclude) continue
+            const result = await sendWebPush({
+              subscription: {
+                endpoint: sub.endpoint,
+                p256dh: sub.p256dh,
+                auth: sub.auth,
+              },
+              payload,
+              vapidPublicKey: env.VAPID_PUBLIC_KEY,
+              vapidPrivateKey: env.VAPID_PRIVATE_KEY,
+              subject: env.VAPID_SUBJECT,
+            })
+            if (result.gone) {
+              await env.DB.prepare(
+                'DELETE FROM push_subscriptions WHERE endpoint = ?',
+              )
+                .bind(sub.endpoint)
+                .run()
+            }
+          }
+        }
+
         return json({ ok: true })
       }
 

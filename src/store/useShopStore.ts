@@ -44,6 +44,7 @@ interface ShopState {
   syncStatus: 'offline' | 'local' | 'syncing' | 'live' | 'error'
   lastSyncedAt?: number
   toast: string | null
+  pendingNotify: { title: string; body: string } | null
 
   hydrate: () => Promise<void>
   persist: () => Promise<void>
@@ -79,11 +80,14 @@ interface ShopState {
   deleteMasterItem: (id: string) => void
   toggleFrequent: (id: string) => void
   addToWeek: (masterItemId: string, opts?: { quantity?: string; notes?: string }) => void
+  /** Add every ★ frequent master item that isn’t already on this week’s list. */
+  addUsualShop: () => number
   removeFromWeek: (shoppingItemId: string) => void
   toggleChecked: (shoppingItemId: string) => void
   clearChecked: () => void
   clearCurrentList: () => void
   updateShoppingItem: (id: string, patch: Partial<Pick<ShoppingItem, 'quantity' | 'notes'>>) => void
+  queueNotify: (title: string, body: string) => void
 
   scanBarcode: (barcode: string) => Promise<{
     masterItemId?: string
@@ -151,6 +155,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
   categoryFilter: 'all',
   syncStatus: 'local',
   toast: null,
+  pendingNotify: null,
 
   hydrate: async () => {
     const snap = await loadSnapshot()
@@ -181,6 +186,10 @@ export const useShopStore = create<ShopState>((set, get) => ({
     }
   },
 
+  queueNotify: (title, body) => {
+    set({ pendingNotify: { title, body } })
+  },
+
   persist: async () => {
     const state = get()
     const snap = snapshotFrom(state)
@@ -189,10 +198,20 @@ export const useShopStore = create<ShopState>((set, get) => ({
       broadcastLocalChange(state.family.id)
       if (hasRemoteApi()) {
         set({ syncStatus: 'syncing' })
-        const ok = await remotePushSnapshot(snap)
+        const notify = state.pendingNotify
+        const ok = await remotePushSnapshot(snap, {
+          notify: notify
+            ? {
+                title: notify.title,
+                body: notify.body,
+                excludeMemberId: state.member?.id,
+              }
+            : undefined,
+        })
         set({
           syncStatus: ok ? 'live' : 'error',
           lastSyncedAt: ok ? Date.now() : state.lastSyncedAt,
+          pendingNotify: ok ? null : state.pendingNotify,
         })
         if (ok) void get().refreshMembers()
       }
@@ -456,9 +475,68 @@ export const useShopStore = create<ShopState>((set, get) => ({
       addedAt: Date.now(),
       addedBy: get().member?.displayName,
     }
-    set({ shoppingItems: [item, ...get().shoppingItems] })
+    const who = get().member?.displayName || 'Someone'
+    set({
+      shoppingItems: [item, ...get().shoppingItems],
+      pendingNotify: {
+        title: get().family?.name || 'Family Shop',
+        body: `${who} added ${master.name}`,
+      },
+    })
     schedulePersist(get)
     get().showToast(`Added ${master.name}`)
+  },
+
+  addUsualShop: () => {
+    const family = get().family
+    if (!family) {
+      get().showToast('Create or join a family first')
+      return 0
+    }
+    const onList = new Set(
+      get()
+        .shoppingItems.filter((s) => !s.checked)
+        .map((s) => s.masterItemId),
+    )
+    const frequent = get().masterItems.filter((m) => m.frequent)
+    if (frequent.length === 0) {
+      get().showToast('Star items on the Master list first (★)')
+      return 0
+    }
+
+    const who = get().member?.displayName || 'Someone'
+    const toAdd = frequent.filter((m) => !onList.has(m.id))
+    if (toAdd.length === 0) {
+      get().showToast('All usual items are already on this week’s list')
+      return 0
+    }
+
+    const now = Date.now()
+    const newItems: ShoppingItem[] = toAdd.map((m, i) => ({
+      id: uid('shop'),
+      familyId: family.id,
+      masterItemId: m.id,
+      quantity: '',
+      notes: m.defaultNotes ?? '',
+      checked: false,
+      addedAt: now + i,
+      addedBy: who,
+    }))
+
+    set({
+      shoppingItems: [...newItems, ...get().shoppingItems],
+      pendingNotify: {
+        title: family.name,
+        body: `${who} started the usual shop (+${toAdd.length})`,
+      },
+    })
+    schedulePersist(get)
+    get().showToast(
+      toAdd.length === 1
+        ? `Added ${toAdd[0]!.name}`
+        : `Usual shop: added ${toAdd.length} items`,
+    )
+    return toAdd.length
   },
 
   removeFromWeek: (shoppingItemId) => {
@@ -469,6 +547,12 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   toggleChecked: (shoppingItemId) => {
+    const before = get().shoppingItems.find((s) => s.id === shoppingItemId)
+    const master = before
+      ? get().masterItems.find((m) => m.id === before.masterItemId)
+      : undefined
+    const who = get().member?.displayName || 'Someone'
+    const checkingOff = Boolean(before && !before.checked && master)
     set({
       shoppingItems: get().shoppingItems.map((s) => {
         if (s.id !== shoppingItemId) return s
@@ -479,6 +563,14 @@ export const useShopStore = create<ShopState>((set, get) => ({
           checkedAt: checked ? Date.now() : undefined,
         }
       }),
+      ...(checkingOff && master
+        ? {
+            pendingNotify: {
+              title: get().family?.name || 'Family Shop',
+              body: `${who} got ${master.name}`,
+            },
+          }
+        : {}),
     })
     schedulePersist(get)
   },
@@ -492,7 +584,14 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   clearCurrentList: () => {
-    set({ shoppingItems: [] })
+    const who = get().member?.displayName || 'Someone'
+    set({
+      shoppingItems: [],
+      pendingNotify: {
+        title: get().family?.name || 'Family Shop',
+        body: `${who} cleared this week’s list`,
+      },
+    })
     schedulePersist(get)
     get().showToast('This week’s list cleared — master list kept')
   },

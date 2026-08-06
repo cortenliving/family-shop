@@ -73,7 +73,12 @@ export async function remoteJoinFamily(
   }
 }
 
-export async function remotePushSnapshot(snapshot: AppSnapshot): Promise<boolean> {
+export async function remotePushSnapshot(
+  snapshot: AppSnapshot,
+  opts?: {
+    notify?: { title: string; body: string; excludeMemberId?: string }
+  },
+): Promise<boolean> {
   if (!hasRemoteApi() || !snapshot.family) return false
   try {
     const res = await fetch(apiUrl(`/api/families/${snapshot.family.id}/sync`), {
@@ -89,8 +94,47 @@ export async function remotePushSnapshot(snapshot: AppSnapshot): Promise<boolean
               displayName: snapshot.member.displayName,
             }
           : undefined,
+        notify: opts?.notify,
       }),
     })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export async function remoteSubscribePush(
+  familyId: string,
+  subscription: PushSubscriptionJSON,
+  memberId?: string,
+): Promise<boolean> {
+  if (!hasRemoteApi()) return false
+  try {
+    const res = await fetch(apiUrl(`/api/families/${familyId}/push/subscribe`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription, memberId }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export async function remoteUnsubscribePush(
+  familyId: string,
+  endpoint: string,
+): Promise<boolean> {
+  if (!hasRemoteApi()) return false
+  try {
+    const res = await fetch(
+      apiUrl(`/api/families/${familyId}/push/unsubscribe`),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint }),
+      },
+    )
     return res.ok
   } catch {
     return false
