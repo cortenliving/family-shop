@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AddItemSheet } from '../components/AddItemSheet'
 import { ShopRow, categoryMeta } from '../components/ItemRow'
+import { SharingBanner } from '../components/SharingStatus'
 import { useShopStore } from '../store/useShopStore'
 import { CATEGORIES } from '../types'
 
@@ -68,6 +69,8 @@ export function WeekView() {
             + Add
           </button>
         </div>
+
+        <SharingBanner compact />
 
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <FilterChip

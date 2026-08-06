@@ -9,6 +9,7 @@ import {
   remoteJoinFamily,
   remotePullSnapshot,
   remotePushSnapshot,
+  remoteRegisterMember,
 } from '../lib/sync'
 import { lookupBarcode, mapOffCategories } from '../lib/openFoodFacts'
 import type {
@@ -16,6 +17,7 @@ import type {
   BarcodeCacheEntry,
   CategoryId,
   Family,
+  FamilyMember,
   MasterItem,
   MemberProfile,
   ShoppingItem,
@@ -26,6 +28,7 @@ interface ShopState {
   hydrated: boolean
   family: Family | null
   member: MemberProfile | null
+  familyMembers: FamilyMember[]
   masterItems: MasterItem[]
   shoppingItems: ShoppingItem[]
   barcodeCache: Record<string, BarcodeCacheEntry>
@@ -48,6 +51,7 @@ interface ShopState {
   setMemberName: (name: string) => void
   showToast: (msg: string) => void
   clearToast: () => void
+  refreshMembers: () => Promise<void>
 
   createFamily: (name: string) => Promise<void>
   joinFamily: (code: string) => Promise<boolean>
@@ -116,10 +120,22 @@ function schedulePersist(get: () => ShopState) {
   }, 200)
 }
 
+function applyBundleMembers(
+  set: (partial: Partial<ShopState>) => void,
+  bundle: {
+    members?: FamilyMember[]
+  },
+) {
+  if (bundle.members) {
+    set({ familyMembers: bundle.members })
+  }
+}
+
 export const useShopStore = create<ShopState>((set, get) => ({
   hydrated: false,
   family: null,
   member: null,
+  familyMembers: [],
   masterItems: [],
   shoppingItems: [],
   barcodeCache: {},
@@ -148,6 +164,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
       })
       if (hasRemoteApi() && snap.family) {
         void get().pullRemote()
+        void get().refreshMembers()
       }
     } else {
       set({
@@ -172,6 +189,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
           syncStatus: ok ? 'live' : 'error',
           lastSyncedAt: ok ? Date.now() : state.lastSyncedAt,
         })
+        if (ok) void get().refreshMembers()
       }
     }
   },
@@ -191,6 +209,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
     const member = get().member ?? { id: uid('m'), displayName: name }
     set({ member: { ...member, displayName: name.trim() || 'Me' } })
     schedulePersist(get)
+    void get().refreshMembers()
   },
   showToast: (toast) => {
     set({ toast })
@@ -200,11 +219,20 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
   clearToast: () => set({ toast: null }),
 
+  refreshMembers: async () => {
+    const family = get().family
+    const member = get().member
+    if (!family || !member || !hasRemoteApi()) return
+    const bundle = await remoteRegisterMember(family.id, member)
+    if (bundle) applyBundleMembers(set, bundle)
+  },
+
   createFamily: async (name) => {
     const trimmed = name.trim() || 'Our Family'
+    const member = get().member ?? { id: uid('m'), displayName: 'Me' }
     let family: Family | null = null
     if (hasRemoteApi()) {
-      family = await remoteCreateFamily(trimmed)
+      family = await remoteCreateFamily(trimmed, member)
     }
     if (!family) {
       family = {
@@ -214,40 +242,56 @@ export const useShopStore = create<ShopState>((set, get) => ({
         createdAt: Date.now(),
       }
     }
-    const member = get().member ?? { id: uid('m'), displayName: 'Me' }
     set({
       family,
       member,
+      familyMembers: [
+        {
+          id: member.id,
+          familyId: family.id,
+          displayName: member.displayName,
+          lastSeenAt: Date.now(),
+          joinedAt: Date.now(),
+          active: true,
+        },
+      ],
       masterItems: [],
       shoppingItems: [],
       syncStatus: hasRemoteApi() ? 'live' : 'local',
     })
     await get().persist()
-    get().showToast(`Family “${family.name}” created`)
+    void get().refreshMembers()
+    get().showToast(`Family “${family.name}” created — share the code with family`)
   },
 
   joinFamily: async (code) => {
     const cleaned = code.trim().toUpperCase()
     if (!cleaned) return false
+    const member = get().member ?? { id: uid('m'), displayName: 'Me' }
 
     if (hasRemoteApi()) {
-      const remote = await remoteJoinFamily(cleaned)
+      const remote = await remoteJoinFamily(cleaned, member)
       if (remote) {
         set({
           family: remote.family,
+          member,
           masterItems: remote.masterItems,
           shoppingItems: remote.shoppingItems,
+          familyMembers: remote.members ?? [],
           syncStatus: 'live',
           lastSyncedAt: Date.now(),
         })
         await get().persist()
-        get().showToast(`Joined ${remote.family.name}`)
+        const n = remote.memberCount ?? remote.members?.length ?? 1
+        get().showToast(
+          n > 1
+            ? `Joined ${remote.family.name} — sharing with ${n} people`
+            : `Joined ${remote.family.name}`,
+        )
         return true
       }
     }
 
-    // Local join: allow setting code only if no remote API
-    // (true multi-device join requires Cloudflare API)
     const existing = get().family
     if (existing && existing.code === cleaned) {
       get().showToast('Already in this family')
@@ -255,14 +299,20 @@ export const useShopStore = create<ShopState>((set, get) => ({
     }
 
     if (!hasRemoteApi()) {
-      // Accept code as local family code for demo / single-device share setup
       const family: Family = {
         id: uid('fam'),
         code: cleaned,
         name: `Family ${cleaned}`,
         createdAt: Date.now(),
       }
-      set({ family, masterItems: [], shoppingItems: [], syncStatus: 'local' })
+      set({
+        family,
+        member,
+        familyMembers: [],
+        masterItems: [],
+        shoppingItems: [],
+        syncStatus: 'local',
+      })
       await get().persist()
       get().showToast(
         'Joined locally. Connect Cloudflare API for multi-device sync.',
@@ -277,6 +327,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
   leaveFamily: async () => {
     set({
       family: null,
+      familyMembers: [],
       masterItems: [],
       shoppingItems: [],
       syncStatus: hasRemoteApi() ? 'offline' : 'local',
@@ -508,20 +559,30 @@ export const useShopStore = create<ShopState>((set, get) => ({
           shoppingItems: data.shoppingItems,
           lastSyncedAt: Date.now(),
           syncStatus: 'live',
+          ...(data.members ? { familyMembers: data.members } : {}),
         })
         void saveSnapshot(snapshotFrom(get()))
       },
       onStatus: (status) => {
-        if (status === 'open') set({ syncStatus: 'live' })
-        else if (status === 'connecting') set({ syncStatus: 'syncing' })
-        else if (status === 'error') set({ syncStatus: hasRemoteApi() ? 'error' : 'local' })
+        if (status === 'open') {
+          set({ syncStatus: 'live' })
+          void get().refreshMembers()
+        } else if (status === 'connecting') set({ syncStatus: 'syncing' })
+        else if (status === 'error')
+          set({ syncStatus: hasRemoteApi() ? 'error' : 'local' })
         else if (status === 'closed' && hasRemoteApi()) set({ syncStatus: 'offline' })
       },
     })
 
+    // Keep last_seen fresh so others see you as active
+    const heartbeat = window.setInterval(() => {
+      void get().refreshMembers()
+    }, 60_000)
+
     return () => {
       bc?.close()
       stopWs()
+      window.clearInterval(heartbeat)
     }
   },
 
@@ -537,8 +598,10 @@ export const useShopStore = create<ShopState>((set, get) => ({
         shoppingItems: data.shoppingItems,
         lastSyncedAt: Date.now(),
         syncStatus: 'live',
+        ...(data.members ? { familyMembers: data.members } : {}),
       })
       await saveSnapshot(snapshotFrom(get()))
+      void get().refreshMembers()
     } else {
       set({ syncStatus: 'error' })
     }

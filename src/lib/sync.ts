@@ -1,6 +1,22 @@
-import type { AppSnapshot, Family, MasterItem, ShoppingItem } from '../types'
+import type {
+  AppSnapshot,
+  Family,
+  FamilyMember,
+  MasterItem,
+  MemberProfile,
+  ShoppingItem,
+} from '../types'
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || ''
+
+export type FamilyBundle = {
+  family: Family
+  masterItems: MasterItem[]
+  shoppingItems: ShoppingItem[]
+  members?: FamilyMember[]
+  memberCount?: number
+  activeCount?: number
+}
 
 export function hasRemoteApi(): boolean {
   return Boolean(API_BASE)
@@ -11,13 +27,21 @@ export function apiUrl(path: string): string {
   return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
 }
 
-export async function remoteCreateFamily(name: string): Promise<Family | null> {
+export async function remoteCreateFamily(
+  name: string,
+  member?: MemberProfile | null,
+): Promise<Family | null> {
   if (!hasRemoteApi()) return null
   try {
     const res = await fetch(apiUrl('/api/families'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({
+        name,
+        member: member
+          ? { id: member.id, displayName: member.displayName }
+          : undefined,
+      }),
     })
     if (!res.ok) return null
     return (await res.json()) as Family
@@ -26,17 +50,21 @@ export async function remoteCreateFamily(name: string): Promise<Family | null> {
   }
 }
 
-export async function remoteJoinFamily(code: string): Promise<{
-  family: Family
-  masterItems: MasterItem[]
-  shoppingItems: ShoppingItem[]
-} | null> {
+export async function remoteJoinFamily(
+  code: string,
+  member?: MemberProfile | null,
+): Promise<FamilyBundle | null> {
   if (!hasRemoteApi()) return null
   try {
     const res = await fetch(apiUrl(`/api/families/join`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: code.trim().toUpperCase() }),
+      body: JSON.stringify({
+        code: code.trim().toUpperCase(),
+        member: member
+          ? { id: member.id, displayName: member.displayName }
+          : undefined,
+      }),
     })
     if (!res.ok) return null
     return await res.json()
@@ -55,6 +83,12 @@ export async function remotePushSnapshot(snapshot: AppSnapshot): Promise<boolean
         masterItems: snapshot.masterItems,
         shoppingItems: snapshot.shoppingItems,
         family: snapshot.family,
+        member: snapshot.member
+          ? {
+              id: snapshot.member.id,
+              displayName: snapshot.member.displayName,
+            }
+          : undefined,
       }),
     })
     return res.ok
@@ -63,11 +97,9 @@ export async function remotePushSnapshot(snapshot: AppSnapshot): Promise<boolean
   }
 }
 
-export async function remotePullSnapshot(familyId: string): Promise<{
-  family: Family
-  masterItems: MasterItem[]
-  shoppingItems: ShoppingItem[]
-} | null> {
+export async function remotePullSnapshot(
+  familyId: string,
+): Promise<FamilyBundle | null> {
   if (!hasRemoteApi()) return null
   try {
     const res = await fetch(apiUrl(`/api/families/${familyId}`))
@@ -78,12 +110,30 @@ export async function remotePullSnapshot(familyId: string): Promise<{
   }
 }
 
+/** Register / heartbeat so others see you on the family roster. */
+export async function remoteRegisterMember(
+  familyId: string,
+  member: MemberProfile,
+): Promise<FamilyBundle | null> {
+  if (!hasRemoteApi()) return null
+  try {
+    const res = await fetch(apiUrl(`/api/families/${familyId}/members`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: member.id,
+        displayName: member.displayName,
+      }),
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 export type RealtimeHandlers = {
-  onSnapshot: (data: {
-    masterItems: MasterItem[]
-    shoppingItems: ShoppingItem[]
-    family: Family
-  }) => void
+  onSnapshot: (data: FamilyBundle) => void
   onStatus: (status: 'connecting' | 'open' | 'closed' | 'error') => void
 }
 
@@ -122,11 +172,7 @@ export function connectRealtime(
       try {
         const msg = JSON.parse(String(ev.data)) as {
           type: string
-          payload?: {
-            masterItems: MasterItem[]
-            shoppingItems: ShoppingItem[]
-            family: Family
-          }
+          payload?: FamilyBundle
         }
         if (msg.type === 'snapshot' && msg.payload) {
           handlers.onSnapshot(msg.payload)

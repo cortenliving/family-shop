@@ -76,6 +76,16 @@ export interface MemberProfile {
   displayName: string
 }
 
+/** Roster entry from the shared family (Cloudflare). */
+export interface FamilyMember {
+  id: string
+  familyId: string
+  displayName: string
+  lastSeenAt: number
+  joinedAt: number
+  active: boolean
+}
+
 export interface AppSnapshot {
   version: 1
   family: Family | null

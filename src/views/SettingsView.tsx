@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { SharingStatusCard } from '../components/SharingStatus'
 import { hasRemoteApi } from '../lib/sync'
 import { useShopStore } from '../store/useShopStore'
 
@@ -8,6 +9,7 @@ export function SettingsView() {
   const theme = useShopStore((s) => s.theme)
   const weeklyReminder = useShopStore((s) => s.weeklyReminder)
   const syncStatus = useShopStore((s) => s.syncStatus)
+  const familyMembers = useShopStore((s) => s.familyMembers)
   const createFamily = useShopStore((s) => s.createFamily)
   const joinFamily = useShopStore((s) => s.joinFamily)
   const leaveFamily = useShopStore((s) => s.leaveFamily)
@@ -89,17 +91,20 @@ export function SettingsView() {
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                Sync: {syncStatus}
-                {hasRemoteApi() ? ' · Cloudflare connected' : ' · local / multi-tab'}
+                Status: {syncStatus}
+                {hasRemoteApi() ? ' · cloud connected' : ' · this device only'}
               </p>
             </div>
+
+            <SharingStatusCard />
+
             <div className="flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => void shareInvite()}
                 className="min-h-12 rounded-2xl bg-teal-600 font-bold text-white"
               >
-                Share invite link / code
+                Invite family (share link / code)
               </button>
               {hasRemoteApi() ? (
                 <button
@@ -107,7 +112,7 @@ export function SettingsView() {
                   onClick={() => void pullRemote()}
                   className="min-h-12 rounded-2xl bg-slate-100 font-semibold dark:bg-slate-800"
                 >
-                  Pull latest from cloud
+                  Pull latest list from cloud
                 </button>
               ) : null}
               <button
@@ -189,7 +194,14 @@ export function SettingsView() {
           value={member?.displayName ?? ''}
           onChange={(e) => setMemberName(e.target.value)}
           className="mt-1 min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-800"
+          placeholder="e.g. Mum, Dad, Alex"
         />
+        <p className="mt-1.5 text-xs text-slate-500">
+          This is how you show up on the shared family list
+          {familyMembers.length > 1
+            ? ` (${familyMembers.length} people on this list).`
+            : '.'}
+        </p>
       </section>
 
       <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">

@@ -31,6 +31,17 @@ type ShopRow = {
   added_by: string | null
 }
 
+type MemberRow = {
+  id: string
+  family_id: string
+  display_name: string
+  last_seen_at: number
+  joined_at: number
+}
+
+/** Consider someone "active" if seen in the last 10 minutes. */
+const ACTIVE_MS = 10 * 60 * 1000
+
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -94,6 +105,38 @@ function mapShop(r: ShopRow) {
   }
 }
 
+function mapMember(r: MemberRow) {
+  const now = Date.now()
+  return {
+    id: r.id,
+    familyId: r.family_id,
+    displayName: r.display_name,
+    lastSeenAt: r.last_seen_at,
+    joinedAt: r.joined_at,
+    active: now - r.last_seen_at < ACTIVE_MS,
+  }
+}
+
+async function upsertMember(
+  db: D1Database,
+  familyId: string,
+  member: { id: string; displayName: string } | undefined | null,
+) {
+  if (!member?.id) return
+  const now = Date.now()
+  const name = (member.displayName || 'Me').trim() || 'Me'
+  await db
+    .prepare(
+      `INSERT INTO family_members (id, family_id, display_name, last_seen_at, joined_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(family_id, id) DO UPDATE SET
+         display_name = excluded.display_name,
+         last_seen_at = excluded.last_seen_at`,
+    )
+    .bind(member.id, familyId, name, now, now)
+    .run()
+}
+
 async function loadFamilyBundle(db: D1Database, familyId: string) {
   const family = await db
     .prepare('SELECT id, code, name, created_at as createdAt FROM families WHERE id = ?')
@@ -112,6 +155,15 @@ async function loadFamilyBundle(db: D1Database, familyId: string) {
     .bind(familyId)
     .all<ShopRow>()
 
+  const members = await db
+    .prepare(
+      'SELECT * FROM family_members WHERE family_id = ? ORDER BY last_seen_at DESC',
+    )
+    .bind(familyId)
+    .all<MemberRow>()
+
+  const memberList = (members.results ?? []).map(mapMember)
+
   return {
     family: {
       id: family.id,
@@ -121,6 +173,9 @@ async function loadFamilyBundle(db: D1Database, familyId: string) {
     },
     masterItems: (master.results ?? []).map(mapMaster),
     shoppingItems: (shopping.results ?? []).map(mapShop),
+    members: memberList,
+    memberCount: memberList.length,
+    activeCount: memberList.filter((m) => m.active).length,
   }
 }
 
@@ -158,7 +213,10 @@ export default {
       }
 
       if (path === '/api/families' && request.method === 'POST') {
-        const body = (await request.json()) as { name?: string }
+        const body = (await request.json()) as {
+          name?: string
+          member?: { id: string; displayName: string }
+        }
         const id = crypto.randomUUID()
         const code = familyCode()
         const name = (body.name || 'Our Family').trim()
@@ -168,11 +226,15 @@ export default {
         )
           .bind(id, code, name, createdAt)
           .run()
+        await upsertMember(env.DB, id, body.member)
         return json({ id, code, name, createdAt })
       }
 
       if (path === '/api/families/join' && request.method === 'POST') {
-        const body = (await request.json()) as { code?: string }
+        const body = (await request.json()) as {
+          code?: string
+          member?: { id: string; displayName: string }
+        }
         const code = (body.code || '').trim().toUpperCase()
         const family = await env.DB.prepare(
           'SELECT id FROM families WHERE code = ?',
@@ -180,7 +242,31 @@ export default {
           .bind(code)
           .first<{ id: string }>()
         if (!family) return json({ error: 'Not found' }, 404)
+        await upsertMember(env.DB, family.id, body.member)
         const bundle = await loadFamilyBundle(env.DB, family.id)
+        return json(bundle)
+      }
+
+      // Heartbeat / register presence for a member
+      const memberMatch = path.match(/^\/api\/families\/([^/]+)\/members$/)
+      if (memberMatch && request.method === 'POST') {
+        const familyId = memberMatch[1]!
+        const body = (await request.json()) as {
+          id?: string
+          displayName?: string
+        }
+        if (!body.id) return json({ error: 'Missing member id' }, 400)
+        const family = await env.DB.prepare('SELECT id FROM families WHERE id = ?')
+          .bind(familyId)
+          .first()
+        if (!family) return json({ error: 'Not found' }, 404)
+        await upsertMember(env.DB, familyId, {
+          id: body.id,
+          displayName: body.displayName || 'Me',
+        })
+        const bundle = await loadFamilyBundle(env.DB, familyId)
+        // Notify others of roster update (same snapshot channel)
+        await broadcast(env, familyId)
         return json(bundle)
       }
 
@@ -196,6 +282,7 @@ export default {
         const familyId = syncMatch[1]!
         const body = (await request.json()) as {
           family: { id: string; code: string; name: string; createdAt: number }
+          member?: { id: string; displayName: string }
           masterItems: Array<{
             id: string
             familyId: string
@@ -236,6 +323,8 @@ export default {
             body.family.createdAt,
           )
           .run()
+
+        await upsertMember(env.DB, familyId, body.member)
 
         // Replace lists for this family (simple last-write-wins snapshot sync)
         await env.DB.prepare('DELETE FROM shopping_items WHERE family_id = ?')
