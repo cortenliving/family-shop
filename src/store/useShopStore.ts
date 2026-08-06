@@ -53,6 +53,7 @@ interface ShopState {
   setTheme: (t: 'light' | 'dark' | 'system') => void
   setWeeklyReminder: (on: boolean) => void
   setMemberName: (name: string) => void
+  saveMemberName: (name?: string) => void
   showToast: (msg: string) => void
   clearToast: () => void
   refreshMembers: () => Promise<void>
@@ -210,10 +211,22 @@ export const useShopStore = create<ShopState>((set, get) => ({
     schedulePersist(get)
   },
   setMemberName: (name) => {
-    const member = get().member ?? { id: uid('m'), displayName: name }
-    set({ member: { ...member, displayName: name.trim() || 'Me' } })
+    // Allow empty/partial while typing — don't force "Me" on every keystroke
+    // (that made it impossible to clear "Me" and type a new name).
+    const member = get().member ?? { id: uid('m'), displayName: 'Me' }
+    const displayName = name // keep as typed; save path normalises empty → Me
+    set({ member: { ...member, displayName } })
+    schedulePersist(get)
+  },
+
+  /** Commit display name (trim + default) and push to family roster. */
+  saveMemberName: (name?: string) => {
+    const member = get().member ?? { id: uid('m'), displayName: 'Me' }
+    const displayName = (name ?? member.displayName).trim() || 'Me'
+    set({ member: { ...member, displayName } })
     schedulePersist(get)
     void get().refreshMembers()
+    get().showToast(`Name set to ${displayName}`)
   },
   showToast: (toast) => {
     set({ toast })

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { SharingStatusCard } from '../components/SharingStatus'
 import { hasRemoteApi } from '../lib/sync'
 import { useShopStore } from '../store/useShopStore'
@@ -16,12 +16,29 @@ export function SettingsView() {
   const setTheme = useShopStore((s) => s.setTheme)
   const setWeeklyReminder = useShopStore((s) => s.setWeeklyReminder)
   const setMemberName = useShopStore((s) => s.setMemberName)
+  const saveMemberName = useShopStore((s) => s.saveMemberName)
   const showToast = useShopStore((s) => s.showToast)
   const pullRemote = useShopStore((s) => s.pullRemote)
 
   const [familyName, setFamilyName] = useState('Our Family')
   const [joinCode, setJoinCode] = useState('')
   const [busy, setBusy] = useState(false)
+  // Local draft so clearing "Me" to type "Kane" is not fought by the store
+  const [nameDraft, setNameDraft] = useState(member?.displayName ?? 'Me')
+  const [nameDirty, setNameDirty] = useState(false)
+
+  useEffect(() => {
+    if (!nameDirty && member?.displayName != null) {
+      setNameDraft(member.displayName)
+    }
+  }, [member?.displayName, nameDirty])
+
+  const commitName = () => {
+    const next = nameDraft.trim() || 'Me'
+    setNameDraft(next)
+    setNameDirty(false)
+    saveMemberName(next)
+  }
 
   const shareInvite = async () => {
     if (!family) return
@@ -190,17 +207,41 @@ export function SettingsView() {
         <label className="mt-3 block text-xs font-semibold text-slate-500">
           Display name
         </label>
-        <input
-          value={member?.displayName ?? ''}
-          onChange={(e) => setMemberName(e.target.value)}
-          className="mt-1 min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-800"
-          placeholder="e.g. Mum, Dad, Alex"
-        />
+        <div className="mt-1 flex gap-2">
+          <input
+            value={nameDraft}
+            onChange={(e) => {
+              setNameDirty(true)
+              setNameDraft(e.target.value)
+              setMemberName(e.target.value)
+            }}
+            onBlur={() => {
+              if (nameDirty) commitName()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.currentTarget.blur()
+              }
+            }}
+            className="min-h-12 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-800"
+            placeholder="e.g. Kane, Mum, Dad"
+            autoComplete="name"
+            enterKeyHint="done"
+          />
+          <button
+            type="button"
+            onClick={commitName}
+            className="min-h-12 shrink-0 rounded-2xl bg-teal-600 px-4 text-sm font-bold text-white"
+          >
+            Save
+          </button>
+        </div>
         <p className="mt-1.5 text-xs text-slate-500">
           This is how you show up on the shared family list
           {familyMembers.length > 1
             ? ` (${familyMembers.length} people on this list).`
-            : '.'}
+            : '.'}{' '}
+          Tap Save (or leave the field) after typing.
         </p>
       </section>
 
