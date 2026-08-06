@@ -6,8 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "family-shop"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
-preview_database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_id = "85789e16-873e-4185-a288-8e971c8eb38b"
+preview_database_id = "85789e16-873e-4185-a288-8e971c8eb38b"
 
 [durable_objects]
 bindings = [
@@ -16,7 +16,7 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["FamilyRoom"]
+new_sqlite_classes = ["FamilyRoom"]
 
 # Optional: serve API under same host as Pages via route
 # routes = [{ pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }]
