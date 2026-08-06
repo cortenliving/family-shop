@@ -1,6 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="16" fill="#0f766e"/>
-  <path d="M18 22h28v4H18v-4zm0 10h20v4H18v-4zm0 10h24v4H18v-4z" fill="#fff"/>
-  <circle cx="46" cy="42" r="10" fill="#fbbf24"/>
-  <path d="M46 36v12M40 42h12" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round"/>
+  <rect width="64" height="64" rx="14" fill="#0f766e"/>
+  <!-- handle -->
+  <path d="M14 18h10a2 2 0 0 1 2 2v2" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M16 18v12" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- basket -->
+  <path d="M20 26h28l3 16H23L20 26z" stroke="#fff" stroke-width="3.2" stroke-linejoin="round" fill="none"/>
+  <!-- basket mesh -->
+  <path d="M26 30v10M33 30v10M40 30v10M24 34h22" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+  <!-- base bar -->
+  <path d="M22 44h28" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <!-- nose -->
+  <path d="M48 28l6 16" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>
+  <!-- wheels -->
+  <circle cx="28" cy="51" r="4.5" fill="#fff"/>
+  <circle cx="46" cy="51" r="4.5" fill="#fff"/>
+  <circle cx="28" cy="51" r="1.8" fill="#0f766e"/>
+  <circle cx="46" cy="51" r="1.8" fill="#0f766e"/>
 </svg>
