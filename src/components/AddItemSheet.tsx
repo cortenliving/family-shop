@@ -132,7 +132,12 @@ export function AddItemSheet({
       setSizeLabel(result.prefill.sizeLabel ?? '')
       setImageUrl(result.prefill.imageUrl ?? '')
       setCategory(result.prefill.category)
-      setHint(result.error ?? (result.prefill.name ? 'Product found — confirm & add' : 'Enter a name for this barcode'))
+      setHint(
+        result.prefill.name
+          ? 'Product found — confirm & add'
+          : result.error ??
+              'Not in the online database (common for NZ packs). Type a name — we will remember it next scan.',
+      )
     }
   }
 

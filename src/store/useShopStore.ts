@@ -11,7 +11,11 @@ import {
   remotePushSnapshot,
   remoteRegisterMember,
 } from '../lib/sync'
-import { lookupBarcode, mapOffCategories } from '../lib/openFoodFacts'
+import {
+  barcodeVariants,
+  lookupBarcode,
+  mapOffCategories,
+} from '../lib/openFoodFacts'
 import type {
   AppSnapshot,
   BarcodeCacheEntry,
@@ -500,18 +504,18 @@ export const useShopStore = create<ShopState>((set, get) => ({
     const result = await lookupBarcode(cleaned, get().barcodeCache)
     if (result.found && result.entry) {
       const entry = result.entry
-      set({
-        barcodeCache: {
-          ...get().barcodeCache,
-          [entry.barcode]: entry,
-        },
-      })
+      // Cache under all variants so re-scans match
+      const nextCache = { ...get().barcodeCache }
+      for (const v of [entry.barcode, cleaned, ...barcodeVariants(cleaned)]) {
+        if (v) nextCache[v] = entry
+      }
+      set({ barcodeCache: nextCache })
       schedulePersist(get)
       return {
         prefill: {
           name: entry.productName,
           brand: entry.brands,
-          barcode: entry.barcode,
+          barcode: entry.barcode || cleaned,
           sizeLabel: entry.quantity,
           imageUrl: entry.imageUrl,
           category: mapOffCategories(entry.categoriesTags),
@@ -525,7 +529,9 @@ export const useShopStore = create<ShopState>((set, get) => ({
         barcode: cleaned,
         category: 'other',
       },
-      error: result.error ?? 'Product not found — enter a name',
+      error:
+        result.message ??
+        'Not in the product database. Type a name once — next scan will remember it.',
     }
   },
 

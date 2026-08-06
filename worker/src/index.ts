@@ -1,3 +1,5 @@
+import { lookupProduct } from './productLookup'
+
 export interface Env {
   DB: D1Database
   FAMILY_ROOM: DurableObjectNamespace
@@ -210,6 +212,16 @@ export default {
 
       if (path === '/api/health') {
         return json({ ok: true, app: env.APP_NAME })
+      }
+
+      // Product barcode lookup (proxied so we can send a proper User-Agent
+      // and try multiple databases — browsers strip UA and OFF 404s look like errors)
+      const productMatch = path.match(/^\/api\/product\/([^/]+)$/)
+      if (productMatch && request.method === 'GET') {
+        const code = decodeURIComponent(productMatch[1]!)
+        const result = await lookupProduct(code)
+        // Always 200 — "not found" is a normal result, not an HTTP error
+        return json(result)
       }
 
       if (path === '/api/families' && request.method === 'POST') {
