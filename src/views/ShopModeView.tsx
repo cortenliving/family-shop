@@ -17,10 +17,16 @@ export function ShopModeView() {
   )
 
   const grouped = useMemo(() => {
-    const todo = shoppingItems.filter((s) => !s.checked)
-    const bought = shoppingItems.filter((s) => s.checked)
+    const byName = (a: (typeof shoppingItems)[number], b: (typeof shoppingItems)[number]) => {
+      const nameA = masterById.get(a.masterItemId)?.name ?? ''
+      const nameB = masterById.get(b.masterItemId)?.name ?? ''
+      return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' })
+    }
 
-    // Group todo by category for aisle-friendly flow
+    const todo = shoppingItems.filter((s) => !s.checked).sort(byName)
+    const bought = shoppingItems.filter((s) => s.checked).sort(byName)
+
+    // Group todo by category for aisle-friendly flow; A–Z within each category
     const map = new Map<string, typeof todo>()
     for (const s of todo) {
       const cat = masterById.get(s.masterItemId)?.category ?? 'other'

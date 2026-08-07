@@ -42,13 +42,18 @@ export function WeekView() {
   )
 
   const { todo, bought } = useMemo(() => {
+    const byName = (a: (typeof shoppingItems)[number], b: (typeof shoppingItems)[number]) => {
+      const nameA = masterById.get(a.masterItemId)?.name ?? ''
+      const nameB = masterById.get(b.masterItemId)?.name ?? ''
+      return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' })
+    }
     const filtered = shoppingItems.filter((s) => {
       if (categoryFilter === 'all') return true
       return masterById.get(s.masterItemId)?.category === categoryFilter
     })
     return {
-      todo: filtered.filter((s) => !s.checked),
-      bought: filtered.filter((s) => s.checked),
+      todo: filtered.filter((s) => !s.checked).sort(byName),
+      bought: filtered.filter((s) => s.checked).sort(byName),
     }
   }, [shoppingItems, categoryFilter, masterById])
 
