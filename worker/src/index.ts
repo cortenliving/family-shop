@@ -445,16 +445,40 @@ export default {
 
         await upsertMember(env.DB, familyId, body.member)
 
-        // Replace lists for this family (simple last-write-wins snapshot sync)
-        await env.DB.prepare('DELETE FROM shopping_items WHERE family_id = ?')
-          .bind(familyId)
-          .run()
-        await env.DB.prepare('DELETE FROM master_items WHERE family_id = ?')
-          .bind(familyId)
-          .run()
+        const masterItems = body.masterItems ?? []
+        const shoppingItems = body.shoppingItems ?? []
 
-        const stmts: D1PreparedStatement[] = []
-        for (const m of body.masterItems) {
+        // Never wipe a non-empty master library with an empty snapshot
+        // (common bug: empty device / failed client state overwriting the family).
+        if (masterItems.length === 0) {
+          const existing = await env.DB.prepare(
+            'SELECT COUNT(*) as c FROM master_items WHERE family_id = ?',
+          )
+            .bind(familyId)
+            .first<{ c: number }>()
+          if ((existing?.c ?? 0) > 0) {
+            return json(
+              {
+                error:
+                  'Refusing to replace master list with empty snapshot. Add products or use Leave family.',
+                code: 'EMPTY_MASTER_REJECTED',
+              },
+              409,
+            )
+          }
+        }
+
+        // Atomic replace: deletes + inserts in one D1 batch so a failed
+        // insert cannot leave the family with no products.
+        const stmts: D1PreparedStatement[] = [
+          env.DB.prepare('DELETE FROM shopping_items WHERE family_id = ?').bind(
+            familyId,
+          ),
+          env.DB.prepare('DELETE FROM master_items WHERE family_id = ?').bind(
+            familyId,
+          ),
+        ]
+        for (const m of masterItems) {
           stmts.push(
             env.DB.prepare(
               `INSERT INTO master_items
@@ -478,7 +502,7 @@ export default {
             ),
           )
         }
-        for (const s of body.shoppingItems) {
+        for (const s of shoppingItems) {
           stmts.push(
             env.DB.prepare(
               `INSERT INTO shopping_items
@@ -497,9 +521,7 @@ export default {
             ),
           )
         }
-        if (stmts.length) {
-          await env.DB.batch(stmts)
-        }
+        await env.DB.batch(stmts)
 
         await broadcast(env, familyId)
 

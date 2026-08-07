@@ -731,10 +731,24 @@ export const useShopStore = create<ShopState>((set, get) => ({
 
     const stopWs = connectRealtime(family.id, {
       onSnapshot: (data) => {
+        const remoteMaster = data.masterItems ?? []
+        const localMaster = get().masterItems
+        // Don't adopt a wiped cloud master over a full local library
+        if (remoteMaster.length === 0 && localMaster.length > 0) {
+          set({
+            family: data.family,
+            lastSyncedAt: Date.now(),
+            syncStatus: 'live',
+            ...(data.members ? { familyMembers: data.members } : {}),
+          })
+          // Push local products back to recover the family list
+          void get().persist()
+          return
+        }
         set({
           family: data.family,
-          masterItems: data.masterItems,
-          shoppingItems: data.shoppingItems,
+          masterItems: remoteMaster,
+          shoppingItems: data.shoppingItems ?? [],
           lastSyncedAt: Date.now(),
           syncStatus: 'live',
           ...(data.members ? { familyMembers: data.members } : {}),
@@ -770,10 +784,27 @@ export const useShopStore = create<ShopState>((set, get) => ({
     set({ syncStatus: 'syncing' })
     const data = await remotePullSnapshot(family.id)
     if (data) {
+      const remoteMaster = data.masterItems ?? []
+      const localMaster = get().masterItems
+      // Cloud empty but this phone still has products → keep local & re-upload
+      if (remoteMaster.length === 0 && localMaster.length > 0) {
+        set({
+          family: data.family,
+          lastSyncedAt: Date.now(),
+          syncStatus: 'live',
+          ...(data.members ? { familyMembers: data.members } : {}),
+        })
+        await saveSnapshot(snapshotFrom(get()))
+        void get().refreshMembers()
+        // Recover cloud from this device
+        await get().persist()
+        get().showToast('Restored products from this device to the cloud')
+        return
+      }
       set({
         family: data.family,
-        masterItems: data.masterItems,
-        shoppingItems: data.shoppingItems,
+        masterItems: remoteMaster,
+        shoppingItems: data.shoppingItems ?? [],
         lastSyncedAt: Date.now(),
         syncStatus: 'live',
         ...(data.members ? { familyMembers: data.members } : {}),
