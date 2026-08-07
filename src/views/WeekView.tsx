@@ -133,41 +133,22 @@ export function WeekView() {
 
       {suggestions.length > 0 ? (
         <section className="px-4 pt-4">
-          <h2 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">
-            Suggested for this week
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+            Quick add
           </h2>
-          <p className="mb-2 text-[11px] text-slate-400">
-            Based on what you add most often · tap to add
-          </p>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {suggestions.map((m) => {
-              const count = m.weekAddCount ?? 0
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => addToWeek(m.id)}
-                  className="shrink-0 rounded-full bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-950 ring-1 ring-teal-200 dark:bg-teal-950/40 dark:text-teal-50 dark:ring-teal-800"
-                >
-                  {categoryMeta(m.category).emoji} {m.name}
-                  {m.frequent ? (
-                    <span className="ml-1 text-amber-500">★</span>
-                  ) : count > 1 ? (
-                    <span className="ml-1 text-[10px] font-bold text-teal-600 dark:text-teal-300">
-                      ×{count}
-                    </span>
-                  ) : null}
-                </button>
-              )
-            })}
+          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {suggestions.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => addToWeek(m.id)}
+                className="shrink-0 rounded-full bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-800"
+              >
+                {categoryMeta(m.category).emoji} {m.name}
+                {m.frequent ? <span className="ml-1 text-amber-500">★</span> : null}
+              </button>
+            ))}
           </div>
-        </section>
-      ) : masterItems.length > 0 ? (
-        <section className="px-4 pt-4">
-          <p className="text-xs text-slate-400">
-            Tip: keep adding items each week — the app learns your regulars and
-            suggests them here.
-          </p>
         </section>
       ) : null}
 
