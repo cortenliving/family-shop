@@ -17,6 +17,10 @@ import {
   lookupBarcode,
   mapOffCategories,
 } from '../lib/openFoodFacts'
+import {
+  applyWeekAddLearning,
+  usualShopCandidates,
+} from '../lib/recommendations'
 import type {
   AppSnapshot,
   BarcodeCacheEntry,
@@ -443,6 +447,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
       imageUrl: input.imageUrl,
       category: input.category ?? 'other',
       frequent: input.frequent ?? false,
+      weekAddCount: 0,
       defaultNotes: input.defaultNotes,
       createdAt: now,
       updatedAt: now,
@@ -501,6 +506,10 @@ export const useShopStore = create<ShopState>((set, get) => ({
       return
     }
 
+    const now = Date.now()
+    const learned = applyWeekAddLearning(master, now)
+    const becameFrequent = !master.frequent && learned.frequent
+
     const item: ShoppingItem = {
       id: uid('shop'),
       familyId: family.id,
@@ -508,11 +517,14 @@ export const useShopStore = create<ShopState>((set, get) => ({
       quantity: opts?.quantity ?? '',
       notes: opts?.notes ?? master.defaultNotes ?? '',
       checked: false,
-      addedAt: Date.now(),
+      addedAt: now,
       addedBy: get().member?.displayName,
     }
     const who = get().member?.displayName || 'Someone'
     set({
+      masterItems: get().masterItems.map((m) =>
+        m.id === masterItemId ? learned : m,
+      ),
       shoppingItems: [item, ...get().shoppingItems],
       pendingNotify: {
         title: get().family?.name || 'Family Shop',
@@ -520,7 +532,11 @@ export const useShopStore = create<ShopState>((set, get) => ({
       },
     })
     schedulePersist(get)
-    get().showToast(`Added ${master.name}`)
+    get().showToast(
+      becameFrequent
+        ? `Added ${master.name} · learned as a usual item ★`
+        : `Added ${master.name}`,
+    )
   },
 
   addUsualShop: () => {
@@ -534,20 +550,24 @@ export const useShopStore = create<ShopState>((set, get) => ({
         .shoppingItems.filter((s) => !s.checked)
         .map((s) => s.masterItemId),
     )
-    const frequent = get().masterItems.filter((m) => m.frequent)
-    if (frequent.length === 0) {
-      get().showToast('Star items on the Master list first (★)')
+    // Starred + items the family adds most often (learned)
+    const candidates = usualShopCandidates(get().masterItems)
+    if (candidates.length === 0) {
+      get().showToast(
+        'Add items a few times — the app will learn your usual shop',
+      )
       return 0
     }
 
     const who = get().member?.displayName || 'Someone'
-    const toAdd = frequent.filter((m) => !onList.has(m.id))
+    const toAdd = candidates.filter((m) => !onList.has(m.id))
     if (toAdd.length === 0) {
       get().showToast('All usual items are already on this week’s list')
       return 0
     }
 
     const now = Date.now()
+    const learnedIds = new Set(toAdd.map((m) => m.id))
     const newItems: ShoppingItem[] = toAdd.map((m, i) => ({
       id: uid('shop'),
       familyId: family.id,
@@ -560,6 +580,10 @@ export const useShopStore = create<ShopState>((set, get) => ({
     }))
 
     set({
+      // Still count bulk “usual shop” toward learning
+      masterItems: get().masterItems.map((m) =>
+        learnedIds.has(m.id) ? applyWeekAddLearning(m, now) : m,
+      ),
       shoppingItems: [...newItems, ...get().shoppingItems],
       pendingNotify: {
         title: family.name,

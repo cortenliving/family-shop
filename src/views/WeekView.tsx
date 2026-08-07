@@ -2,6 +2,10 @@ import { useMemo, useState } from 'react'
 import { AddItemSheet } from '../components/AddItemSheet'
 import { ShopRow, categoryMeta } from '../components/ItemRow'
 import { SharingBanner } from '../components/SharingStatus'
+import {
+  recommendedForWeek,
+  usualShopCandidates,
+} from '../lib/recommendations'
 import { useShopStore } from '../store/useShopStore'
 import { CATEGORIES } from '../types'
 
@@ -20,24 +24,27 @@ export function WeekView() {
   const setTab = useShopStore((s) => s.setTab)
   const [addOpen, setAddOpen] = useState(false)
 
-  const frequentCount = useMemo(
-    () => masterItems.filter((m) => m.frequent).length,
-    [masterItems],
-  )
-  const frequentMissing = useMemo(() => {
-    const onList = new Set(
-      shoppingItems.filter((s) => !s.checked).map((s) => s.masterItemId),
-    )
-    return masterItems.filter((m) => m.frequent && !onList.has(m.id)).length
-  }, [masterItems, shoppingItems])
-
   const masterById = useMemo(() => {
     const map = new Map(masterItems.map((m) => [m.id, m]))
     return map
   }, [masterItems])
 
-  const frequent = useMemo(
-    () => masterItems.filter((m) => m.frequent).slice(0, 12),
+  // Learned + starred items not already on this week
+  const suggestions = useMemo(
+    () => recommendedForWeek(masterItems, shoppingItems, 14),
+    [masterItems, shoppingItems],
+  )
+
+  const usualMissing = useMemo(() => {
+    const onList = new Set(
+      shoppingItems.filter((s) => !s.checked).map((s) => s.masterItemId),
+    )
+    return usualShopCandidates(masterItems).filter((m) => !onList.has(m.id))
+      .length
+  }, [masterItems, shoppingItems])
+
+  const hasUsualHabits = useMemo(
+    () => usualShopCandidates(masterItems).length > 0,
     [masterItems],
   )
 
@@ -89,21 +96,21 @@ export function WeekView() {
 
         <SharingBanner compact />
 
-        {frequentCount > 0 ? (
+        {hasUsualHabits ? (
           <button
             type="button"
             onClick={() => addUsualShop()}
-            disabled={frequentMissing === 0}
+            disabled={usualMissing === 0}
             className={`mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold active:scale-[0.99] ${
-              frequentMissing === 0
+              usualMissing === 0
                 ? 'bg-slate-100 text-slate-400 dark:bg-slate-800'
                 : 'bg-amber-100 text-amber-950 ring-1 ring-amber-300 dark:bg-amber-950/50 dark:text-amber-50 dark:ring-amber-800'
             }`}
           >
             <span aria-hidden>★</span>
-            {frequentMissing === 0
+            {usualMissing === 0
               ? 'Usual shop already on the list'
-              : `Usual shop · add ${frequentMissing} frequent item${frequentMissing === 1 ? '' : 's'}`}
+              : `Usual shop · add ${usualMissing} regular item${usualMissing === 1 ? '' : 's'}`}
           </button>
         ) : null}
 
@@ -124,33 +131,43 @@ export function WeekView() {
         </div>
       </header>
 
-      {frequent.length > 0 ? (
+      {suggestions.length > 0 ? (
         <section className="px-4 pt-4">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-            Quick add · frequent
+          <h2 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+            Suggested for this week
           </h2>
+          <p className="mb-2 text-[11px] text-slate-400">
+            Based on what you add most often · tap to add
+          </p>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {frequent.map((m) => {
-              const onList = shoppingItems.some(
-                (s) => s.masterItemId === m.id && !s.checked,
-              )
+            {suggestions.map((m) => {
+              const count = m.weekAddCount ?? 0
               return (
                 <button
                   key={m.id}
                   type="button"
-                  disabled={onList}
                   onClick={() => addToWeek(m.id)}
-                  className={`shrink-0 rounded-full px-3 py-2 text-sm font-semibold ${
-                    onList
-                      ? 'bg-slate-100 text-slate-400 dark:bg-slate-800'
-                      : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-800'
-                  }`}
+                  className="shrink-0 rounded-full bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-950 ring-1 ring-teal-200 dark:bg-teal-950/40 dark:text-teal-50 dark:ring-teal-800"
                 >
                   {categoryMeta(m.category).emoji} {m.name}
+                  {m.frequent ? (
+                    <span className="ml-1 text-amber-500">★</span>
+                  ) : count > 1 ? (
+                    <span className="ml-1 text-[10px] font-bold text-teal-600 dark:text-teal-300">
+                      ×{count}
+                    </span>
+                  ) : null}
                 </button>
               )
             })}
           </div>
+        </section>
+      ) : masterItems.length > 0 ? (
+        <section className="px-4 pt-4">
+          <p className="text-xs text-slate-400">
+            Tip: keep adding items each week — the app learns your regulars and
+            suggests them here.
+          </p>
         </section>
       ) : null}
 

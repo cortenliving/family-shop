@@ -44,6 +44,10 @@ export interface MasterItem {
   imageUrl?: string
   category: CategoryId
   frequent: boolean
+  /** How many times this item was added to a weekly list (learns habits). */
+  weekAddCount?: number
+  /** Last time it was added to this week’s list. */
+  lastAddedToWeekAt?: number
   defaultNotes?: string
   createdAt: number
   updatedAt: number

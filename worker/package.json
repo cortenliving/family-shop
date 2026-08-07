@@ -8,7 +8,8 @@
     "db:create": "wrangler d1 create family-shop",
     "db:migrate:local": "wrangler d1 execute family-shop --local --file=schema.sql",
     "db:migrate": "wrangler d1 execute family-shop --remote --file=schema.sql",
-    "db:migrate:remote": "wrangler d1 execute family-shop --remote --file=schema.sql"
+    "db:migrate:remote": "wrangler d1 execute family-shop --remote --file=schema.sql",
+    "db:migrate:learning": "wrangler d1 execute family-shop --remote --file=schema-learning.sql"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250317.0",

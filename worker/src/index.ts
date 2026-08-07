@@ -21,6 +21,8 @@ type MasterRow = {
   category: string
   frequent: number
   default_notes: string | null
+  week_add_count: number | null
+  last_added_to_week_at: number | null
   created_at: number
   updated_at: number
 }
@@ -92,6 +94,8 @@ function mapMaster(r: MasterRow) {
     category: r.category,
     frequent: Boolean(r.frequent),
     defaultNotes: r.default_notes ?? undefined,
+    weekAddCount: r.week_add_count ?? 0,
+    lastAddedToWeekAt: r.last_added_to_week_at ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
@@ -402,6 +406,8 @@ export default {
             category: string
             frequent: boolean
             defaultNotes?: string
+            weekAddCount?: number
+            lastAddedToWeekAt?: number
             createdAt: number
             updatedAt: number
           }>
@@ -452,8 +458,8 @@ export default {
           stmts.push(
             env.DB.prepare(
               `INSERT INTO master_items
-              (id, family_id, name, brand, barcode, size_label, image_url, category, frequent, default_notes, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              (id, family_id, name, brand, barcode, size_label, image_url, category, frequent, default_notes, week_add_count, last_added_to_week_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             ).bind(
               m.id,
               familyId,
@@ -465,6 +471,8 @@ export default {
               m.category,
               m.frequent ? 1 : 0,
               m.defaultNotes ?? null,
+              m.weekAddCount ?? 0,
+              m.lastAddedToWeekAt ?? null,
               m.createdAt,
               m.updatedAt,
             ),

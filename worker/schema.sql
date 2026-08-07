@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS master_items (
   category TEXT NOT NULL DEFAULT 'other',
   frequent INTEGER NOT NULL DEFAULT 0,
   default_notes TEXT,
+  week_add_count INTEGER NOT NULL DEFAULT 0,
+  last_added_to_week_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
