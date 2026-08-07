@@ -54,7 +54,7 @@ function json(data: unknown, status = 200): Response {
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
   })
@@ -65,7 +65,7 @@ function cors(req: Request): Response | null {
     return new Response(null, {
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       },
     })
@@ -344,6 +344,36 @@ export default {
         })
         const bundle = await loadFamilyBundle(env.DB, familyId)
         // Notify others of roster update (same snapshot channel)
+        await broadcast(env, familyId)
+        return json(bundle)
+      }
+
+      // Remove a member from the family roster (cleans up duplicate / unwanted accounts)
+      const removeMemberMatch = path.match(
+        /^\/api\/families\/([^/]+)\/members\/([^/]+)$/,
+      )
+      if (removeMemberMatch && request.method === 'DELETE') {
+        const familyId = removeMemberMatch[1]!
+        const memberId = decodeURIComponent(removeMemberMatch[2]!)
+        if (!memberId) return json({ error: 'Missing member id' }, 400)
+        const family = await env.DB.prepare('SELECT id FROM families WHERE id = ?')
+          .bind(familyId)
+          .first()
+        if (!family) return json({ error: 'Not found' }, 404)
+
+        await env.DB.prepare(
+          'DELETE FROM family_members WHERE family_id = ? AND id = ?',
+        )
+          .bind(familyId, memberId)
+          .run()
+        // Drop push subscriptions tied to that member so they stop getting pings
+        await env.DB.prepare(
+          'DELETE FROM push_subscriptions WHERE family_id = ? AND member_id = ?',
+        )
+          .bind(familyId, memberId)
+          .run()
+
+        const bundle = await loadFamilyBundle(env.DB, familyId)
         await broadcast(env, familyId)
         return json(bundle)
       }

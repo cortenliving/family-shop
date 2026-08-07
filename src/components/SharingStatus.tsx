@@ -68,6 +68,7 @@ export function SharingStatusCard() {
   const lastSyncedAt = useShopStore((s) => s.lastSyncedAt)
   const member = useShopStore((s) => s.member)
   const refreshMembers = useShopStore((s) => s.refreshMembers)
+  const removeFamilyMember = useShopStore((s) => s.removeFamilyMember)
   const pullRemote = useShopStore((s) => s.pullRemote)
 
   if (!family) return null
@@ -144,8 +145,29 @@ export function SharingStatusCard() {
                     ) : null}
                   </span>
                 </span>
-                <span className="shrink-0 text-[11px] text-slate-500">
-                  {isYou || m.active ? 'Active' : formatAgo(m.lastSeenAt)}
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-[11px] text-slate-500">
+                    {isYou || m.active ? 'Active' : formatAgo(m.lastSeenAt)}
+                  </span>
+                  {!isYou ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const label = m.displayName || 'this account'
+                        if (
+                          confirm(
+                            `Remove “${label}” from the family list?\n\nUse this for duplicate or unwanted accounts. They can rejoin with the code if needed.`,
+                          )
+                        ) {
+                          void removeFamilyMember(m.id)
+                        }
+                      }}
+                      className="rounded-lg px-2 py-1 text-[11px] font-bold text-red-600 active:bg-red-50 dark:text-red-400 dark:active:bg-red-950/40"
+                      aria-label={`Remove ${m.displayName}`}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
                 </span>
               </li>
             )
@@ -156,6 +178,13 @@ export function SharingStatusCard() {
           You appear here after the first cloud sync.
         </p>
       )}
+
+      {sorted.length > 1 ? (
+        <p className="mt-2 text-[11px] leading-snug text-teal-900/70 dark:text-teal-200/70">
+          Two accounts for the same person? Remove the extra one here. Each phone
+          keeps its own name under Settings → You.
+        </p>
+      ) : null}
 
       {hasRemoteApi() ? (
         <button

@@ -83,6 +83,7 @@ export function ShopRow({
 }: ShopRowProps) {
   const cat = categoryMeta(master?.category ?? 'other')
   const name = master?.name ?? 'Unknown item'
+  const thumbClass = large ? 'size-14' : 'size-11'
   return (
     <div
       className={`flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 ${
@@ -105,6 +106,23 @@ export function ShopRow({
           <span className={large ? 'text-2xl' : 'text-lg'}>✓</span>
         ) : null}
       </button>
+      {master?.imageUrl ? (
+        <img
+          src={master.imageUrl}
+          alt=""
+          className={`${thumbClass} shrink-0 rounded-xl object-cover bg-slate-100 ${
+            shopping.checked ? 'opacity-50' : ''
+          }`}
+        />
+      ) : (
+        <div
+          className={`flex ${thumbClass} shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg dark:bg-slate-800 ${
+            shopping.checked ? 'opacity-50' : ''
+          }`}
+        >
+          {cat.emoji}
+        </div>
+      )}
       <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-left">
         <p
           className={`font-semibold ${

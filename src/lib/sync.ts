@@ -176,6 +176,26 @@ export async function remoteRegisterMember(
   }
 }
 
+/** Remove a member account from the family roster (e.g. duplicates). */
+export async function remoteRemoveMember(
+  familyId: string,
+  memberId: string,
+): Promise<FamilyBundle | null> {
+  if (!hasRemoteApi()) return null
+  try {
+    const res = await fetch(
+      apiUrl(
+        `/api/families/${familyId}/members/${encodeURIComponent(memberId)}`,
+      ),
+      { method: 'DELETE' },
+    )
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 export type RealtimeHandlers = {
   onSnapshot: (data: FamilyBundle) => void
   onStatus: (status: 'connecting' | 'open' | 'closed' | 'error') => void

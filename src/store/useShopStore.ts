@@ -10,6 +10,7 @@ import {
   remotePullSnapshot,
   remotePushSnapshot,
   remoteRegisterMember,
+  remoteRemoveMember,
 } from '../lib/sync'
 import {
   barcodeVariants,
@@ -58,6 +59,8 @@ interface ShopState {
   showToast: (msg: string) => void
   clearToast: () => void
   refreshMembers: () => Promise<void>
+  /** Remove a duplicate/unwanted person from the family roster (not yourself). */
+  removeFamilyMember: (memberId: string) => Promise<boolean>
 
   createFamily: (name: string) => Promise<void>
   joinFamily: (code: string) => Promise<boolean>
@@ -261,6 +264,39 @@ export const useShopStore = create<ShopState>((set, get) => ({
     if (!family || !member || !hasRemoteApi()) return
     const bundle = await remoteRegisterMember(family.id, member)
     if (bundle) applyBundleMembers(set, bundle)
+  },
+
+  removeFamilyMember: async (memberId) => {
+    const family = get().family
+    const me = get().member
+    if (!family) {
+      get().showToast('No family loaded')
+      return false
+    }
+    if (me && memberId === me.id) {
+      get().showToast('Use “Leave family” to remove yourself')
+      return false
+    }
+
+    // Always update local roster so the UI cleans up even offline
+    const previous = get().familyMembers
+    const nextLocal = previous.filter((m) => m.id !== memberId)
+    set({ familyMembers: nextLocal })
+
+    if (!hasRemoteApi()) {
+      get().showToast('Removed from this device')
+      return true
+    }
+
+    const bundle = await remoteRemoveMember(family.id, memberId)
+    if (!bundle) {
+      set({ familyMembers: previous })
+      get().showToast('Could not remove account — try again')
+      return false
+    }
+    applyBundleMembers(set, bundle)
+    get().showToast('Account removed from family list')
+    return true
   },
 
   createFamily: async (name) => {
