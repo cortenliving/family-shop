@@ -21,6 +21,11 @@ import {
   applyWeekAddLearning,
   usualShopCandidates,
 } from '../lib/recommendations'
+import {
+  localHasExclusiveItems,
+  mergeMasterItems,
+  mergeShoppingItems,
+} from '../lib/mergeLists'
 import type {
   AppSnapshot,
   BarcodeCacheEntry,
@@ -128,12 +133,73 @@ function snapshotFrom(state: ShopState): AppSnapshot {
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null
+/** Bumped on every local list edit so we re-push after concurrent saves. */
+let localMutationGen = 0
+let persistInFlight = false
+
+function markLocalMutation() {
+  localMutationGen++
+}
 
 function schedulePersist(get: () => ShopState) {
+  markLocalMutation()
   if (persistTimer) clearTimeout(persistTimer)
   persistTimer = setTimeout(() => {
     void get().persist()
   }, 200)
+}
+
+/**
+ * Apply a remote family snapshot without deleting items only this device has.
+ * Re-uploads when the merge is richer than the cloud (recovery / race heal).
+ */
+function applyRemoteFamilyLists(
+  data: {
+    family: Family
+    masterItems?: MasterItem[]
+    shoppingItems?: ShoppingItem[]
+    members?: FamilyMember[]
+  },
+  set: (
+    partial:
+      | Partial<ShopState>
+      | ((state: ShopState) => Partial<ShopState>),
+  ) => void,
+  get: () => ShopState,
+  opts?: { recoverToast?: boolean },
+) {
+  const remoteMaster = data.masterItems ?? []
+  const remoteShop = data.shoppingItems ?? []
+  const local = get()
+
+  const mergedMaster = mergeMasterItems(local.masterItems, remoteMaster)
+  const mergedShop = mergeShoppingItems(local.shoppingItems, remoteShop)
+  const hadExclusive = localHasExclusiveItems(
+    local.masterItems,
+    remoteMaster,
+    local.shoppingItems,
+    remoteShop,
+  )
+
+  // Ignore pure remote replace while we're mid-edit / mid-push — still merge
+  // so we never drop the item the user just added.
+  set({
+    family: data.family,
+    masterItems: mergedMaster,
+    shoppingItems: mergedShop,
+    lastSyncedAt: Date.now(),
+    syncStatus: 'live',
+    ...(data.members ? { familyMembers: data.members } : {}),
+  })
+  void saveSnapshot(snapshotFrom(get()))
+
+  if (hadExclusive || (remoteMaster.length === 0 && mergedMaster.length > 0)) {
+    if (opts?.recoverToast && remoteMaster.length === 0 && mergedMaster.length > 0) {
+      get().showToast('Restored products from this device to the cloud')
+    }
+    // Push the union so the cloud catches up
+    schedulePersist(get)
+  }
 }
 
 function applyBundleMembers(
@@ -198,30 +264,52 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   persist: async () => {
-    const state = get()
-    const snap = snapshotFrom(state)
-    await saveSnapshot(snap)
-    if (state.family) {
-      broadcastLocalChange(state.family.id)
-      if (hasRemoteApi()) {
-        set({ syncStatus: 'syncing' })
-        const notify = state.pendingNotify
-        const ok = await remotePushSnapshot(snap, {
-          notify: notify
-            ? {
-                title: notify.title,
-                body: notify.body,
-                excludeMemberId: state.member?.id,
-              }
-            : undefined,
-        })
-        set({
-          syncStatus: ok ? 'live' : 'error',
-          lastSyncedAt: ok ? Date.now() : state.lastSyncedAt,
-          pendingNotify: ok ? null : state.pendingNotify,
-        })
-        if (ok) void get().refreshMembers()
+    if (persistInFlight) {
+      // Coalesce: another save is running; schedule a follow-up with latest state
+      if (persistTimer) clearTimeout(persistTimer)
+      persistTimer = setTimeout(() => {
+        void get().persist()
+      }, 250)
+      return
+    }
+    persistInFlight = true
+    const genAtStart = localMutationGen
+    try {
+      // Always snapshot the latest state (not a stale closure)
+      const state = get()
+      const snap = snapshotFrom(state)
+      await saveSnapshot(snap)
+      if (state.family) {
+        broadcastLocalChange(state.family.id)
+        if (hasRemoteApi()) {
+          set({ syncStatus: 'syncing' })
+          const notify = state.pendingNotify
+          const ok = await remotePushSnapshot(snap, {
+            notify: notify
+              ? {
+                  title: notify.title,
+                  body: notify.body,
+                  excludeMemberId: state.member?.id,
+                }
+              : undefined,
+          })
+
+          set({
+            syncStatus: ok ? 'live' : 'error',
+            lastSyncedAt: ok ? Date.now() : state.lastSyncedAt,
+            pendingNotify: ok ? null : state.pendingNotify,
+          })
+          if (ok) void get().refreshMembers()
+          // User added more items while this request was in flight — push again
+          if (ok && localMutationGen !== genAtStart) {
+            persistInFlight = false
+            await get().persist()
+            return
+          }
+        }
       }
+    } finally {
+      persistInFlight = false
     }
   },
 
@@ -711,17 +799,19 @@ export const useShopStore = create<ShopState>((set, get) => ({
     const family = get().family
     if (!family) return () => {}
 
-    // Same-browser / multi-tab sync
+    // Same-browser / multi-tab sync — merge, never replace-blindly
     let bc: BroadcastChannel | null = null
     try {
       bc = new BroadcastChannel(`family-shop-${family.id}`)
       bc.onmessage = () => {
         void loadSnapshot().then((snap) => {
           if (!snap || snap.family?.id !== family.id) return
-          // Don't clobber if we're mid-edit with newer local state — simple last-write
           set({
-            masterItems: snap.masterItems,
-            shoppingItems: snap.shoppingItems,
+            masterItems: mergeMasterItems(get().masterItems, snap.masterItems ?? []),
+            shoppingItems: mergeShoppingItems(
+              get().shoppingItems,
+              snap.shoppingItems ?? [],
+            ),
           })
         })
       }
@@ -731,29 +821,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
 
     const stopWs = connectRealtime(family.id, {
       onSnapshot: (data) => {
-        const remoteMaster = data.masterItems ?? []
-        const localMaster = get().masterItems
-        // Don't adopt a wiped cloud master over a full local library
-        if (remoteMaster.length === 0 && localMaster.length > 0) {
-          set({
-            family: data.family,
-            lastSyncedAt: Date.now(),
-            syncStatus: 'live',
-            ...(data.members ? { familyMembers: data.members } : {}),
-          })
-          // Push local products back to recover the family list
-          void get().persist()
-          return
-        }
-        set({
-          family: data.family,
-          masterItems: remoteMaster,
-          shoppingItems: data.shoppingItems ?? [],
-          lastSyncedAt: Date.now(),
-          syncStatus: 'live',
-          ...(data.members ? { familyMembers: data.members } : {}),
-        })
-        void saveSnapshot(snapshotFrom(get()))
+        applyRemoteFamilyLists(data, set, get)
       },
       onStatus: (status) => {
         if (status === 'open') {
@@ -784,32 +852,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
     set({ syncStatus: 'syncing' })
     const data = await remotePullSnapshot(family.id)
     if (data) {
-      const remoteMaster = data.masterItems ?? []
-      const localMaster = get().masterItems
-      // Cloud empty but this phone still has products → keep local & re-upload
-      if (remoteMaster.length === 0 && localMaster.length > 0) {
-        set({
-          family: data.family,
-          lastSyncedAt: Date.now(),
-          syncStatus: 'live',
-          ...(data.members ? { familyMembers: data.members } : {}),
-        })
-        await saveSnapshot(snapshotFrom(get()))
-        void get().refreshMembers()
-        // Recover cloud from this device
-        await get().persist()
-        get().showToast('Restored products from this device to the cloud')
-        return
-      }
-      set({
-        family: data.family,
-        masterItems: remoteMaster,
-        shoppingItems: data.shoppingItems ?? [],
-        lastSyncedAt: Date.now(),
-        syncStatus: 'live',
-        ...(data.members ? { familyMembers: data.members } : {}),
-      })
-      await saveSnapshot(snapshotFrom(get()))
+      applyRemoteFamilyLists(data, set, get, { recoverToast: true })
       void get().refreshMembers()
     } else {
       set({ syncStatus: 'error' })
