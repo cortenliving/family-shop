@@ -496,6 +496,9 @@ export default {
         await broadcast(env, familyId)
 
         // Fan-out Web Push to other devices in the family
+        let pushSent = 0
+        let pushFailed = 0
+        let pushSkipped = 0
         if (body.notify?.title && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
           const subs = await env.DB.prepare(
             'SELECT endpoint, p256dh, auth, member_id FROM push_subscriptions WHERE family_id = ?',
@@ -516,8 +519,17 @@ export default {
           })
 
           const exclude = body.notify.excludeMemberId
-          for (const sub of subs.results ?? []) {
-            if (exclude && sub.member_id === exclude) continue
+          const rows = subs.results ?? []
+          if (rows.length === 0) {
+            // No devices have push enabled for this family
+            pushSkipped = 0
+          }
+          for (const sub of rows) {
+            // Skip the sender's device(s) so they don't ping themselves
+            if (exclude && sub.member_id && sub.member_id === exclude) {
+              pushSkipped++
+              continue
+            }
             const result = await sendWebPush({
               subscription: {
                 endpoint: sub.endpoint,
@@ -529,6 +541,90 @@ export default {
               vapidPrivateKey: env.VAPID_PRIVATE_KEY,
               subject: env.VAPID_SUBJECT,
             })
+            if (result.ok) {
+              pushSent++
+            } else {
+              pushFailed++
+              if (result.gone) {
+                await env.DB.prepare(
+                  'DELETE FROM push_subscriptions WHERE endpoint = ?',
+                )
+                  .bind(sub.endpoint)
+                  .run()
+              }
+            }
+          }
+        }
+
+        return json({
+          ok: true,
+          push: {
+            sent: pushSent,
+            failed: pushFailed,
+            skipped: pushSkipped,
+            configured: Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY),
+          },
+        })
+      }
+
+      // Send a test push to all family devices except the caller (debug / verify setup)
+      const testPushMatch = path.match(/^\/api\/families\/([^/]+)\/push\/test$/)
+      if (testPushMatch && request.method === 'POST') {
+        const familyId = testPushMatch[1]!
+        if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+          return json({ error: 'Push not configured on server' }, 503)
+        }
+        const body = (await request.json().catch(() => ({}))) as {
+          excludeMemberId?: string
+          title?: string
+          body?: string
+        }
+        const subs = await env.DB.prepare(
+          'SELECT endpoint, p256dh, auth, member_id FROM push_subscriptions WHERE family_id = ?',
+        )
+          .bind(familyId)
+          .all<{
+            endpoint: string
+            p256dh: string
+            auth: string
+            member_id: string | null
+          }>()
+
+        const payload = JSON.stringify({
+          title: body.title || 'Family Shop',
+          body: body.body || 'Test notification — push is working!',
+          url: '/',
+          tag: 'family-shop-test',
+        })
+
+        let sent = 0
+        let failed = 0
+        let skipped = 0
+        const errors: string[] = []
+        for (const sub of subs.results ?? []) {
+          if (
+            body.excludeMemberId &&
+            sub.member_id &&
+            sub.member_id === body.excludeMemberId
+          ) {
+            skipped++
+            continue
+          }
+          const result = await sendWebPush({
+            subscription: {
+              endpoint: sub.endpoint,
+              p256dh: sub.p256dh,
+              auth: sub.auth,
+            },
+            payload,
+            vapidPublicKey: env.VAPID_PUBLIC_KEY,
+            vapidPrivateKey: env.VAPID_PRIVATE_KEY,
+            subject: env.VAPID_SUBJECT,
+          })
+          if (result.ok) sent++
+          else {
+            failed++
+            if (result.error) errors.push(result.error.slice(0, 120))
             if (result.gone) {
               await env.DB.prepare(
                 'DELETE FROM push_subscriptions WHERE endpoint = ?',
@@ -538,8 +634,14 @@ export default {
             }
           }
         }
-
-        return json({ ok: true })
+        return json({
+          ok: true,
+          total: (subs.results ?? []).length,
+          sent,
+          failed,
+          skipped,
+          errors: errors.slice(0, 3),
+        })
       }
 
       return json({ error: 'Not found' }, 404)

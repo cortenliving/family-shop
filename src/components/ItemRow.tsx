@@ -83,46 +83,54 @@ export function ShopRow({
 }: ShopRowProps) {
   const cat = categoryMeta(master?.category ?? 'other')
   const name = master?.name ?? 'Unknown item'
-  const thumbClass = large ? 'size-14' : 'size-11'
+  const thumbClass = large ? 'size-14' : 'size-12'
   return (
     <div
       className={`flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 ${
         large ? 'px-3 py-4' : 'px-3 py-3'
       }`}
     >
+      {/* One control: product photo (or category emoji) with check overlay */}
       <button
         type="button"
         onClick={onToggle}
-        className={`flex shrink-0 items-center justify-center rounded-2xl border-2 transition ${
-          large ? 'size-14' : 'size-11'
-        } ${
+        className={`relative ${thumbClass} shrink-0 overflow-hidden rounded-xl ring-2 transition active:scale-[0.97] ${
           shopping.checked
-            ? 'border-teal-600 bg-teal-600 text-white'
-            : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'
+            ? 'ring-teal-600'
+            : 'ring-slate-200 dark:ring-slate-600'
         }`}
         aria-label={shopping.checked ? 'Uncheck' : 'Check off'}
       >
+        {master?.imageUrl ? (
+          <img
+            src={master.imageUrl}
+            alt=""
+            className={`size-full object-cover bg-slate-100 ${
+              shopping.checked ? 'opacity-40' : ''
+            }`}
+          />
+        ) : (
+          <span
+            className={`flex size-full items-center justify-center bg-slate-100 text-lg dark:bg-slate-800 ${
+              shopping.checked ? 'opacity-40' : ''
+            }`}
+          >
+            {cat.emoji}
+          </span>
+        )}
         {shopping.checked ? (
-          <span className={large ? 'text-2xl' : 'text-lg'}>✓</span>
-        ) : null}
+          <span className="absolute inset-0 flex items-center justify-center bg-teal-600/75 text-white">
+            <span className={large ? 'text-2xl font-bold' : 'text-lg font-bold'}>
+              ✓
+            </span>
+          </span>
+        ) : (
+          <span
+            className="absolute bottom-0.5 right-0.5 flex size-4 items-center justify-center rounded-full border border-white/90 bg-white/90 text-[10px] text-slate-400 shadow-sm dark:border-slate-700 dark:bg-slate-900/90"
+            aria-hidden
+          />
+        )}
       </button>
-      {master?.imageUrl ? (
-        <img
-          src={master.imageUrl}
-          alt=""
-          className={`${thumbClass} shrink-0 rounded-xl object-cover bg-slate-100 ${
-            shopping.checked ? 'opacity-50' : ''
-          }`}
-        />
-      ) : (
-        <div
-          className={`flex ${thumbClass} shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg dark:bg-slate-800 ${
-            shopping.checked ? 'opacity-50' : ''
-          }`}
-        >
-          {cat.emoji}
-        </div>
-      )}
       <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-left">
         <p
           className={`font-semibold ${

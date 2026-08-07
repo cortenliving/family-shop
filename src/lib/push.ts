@@ -1,4 +1,9 @@
-import { hasRemoteApi, remoteSubscribePush, remoteUnsubscribePush } from './sync'
+import {
+  apiUrl,
+  hasRemoteApi,
+  remoteSubscribePush,
+  remoteUnsubscribePush,
+} from './sync'
 
 const VAPID_PUBLIC = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined)?.trim()
 
@@ -89,24 +94,51 @@ export async function enablePushNotifications(
   }
 
   try {
-    let sub = await reg.pushManager.getSubscription()
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC!) as BufferSource,
-      })
+    // Always refresh the subscription so it matches the current VAPID key
+    // (stale subs from an old key silently never receive pushes).
+    const existing = await reg.pushManager.getSubscription()
+    if (existing) {
+      try {
+        await existing.unsubscribe()
+      } catch {
+        /* ignore */
+      }
     }
 
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC!) as BufferSource,
+    })
+
     const json = sub.toJSON()
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+      return { ok: false, message: 'Browser returned an incomplete push subscription.' }
+    }
+
     const ok = await remoteSubscribePush(familyId, json, memberId)
     if (!ok) {
       return { ok: false, message: 'Could not save subscription on the server.' }
     }
 
-    // Local confirmation so the user knows it works
+    // Ask the server to ping other family devices (proves end-to-end path)
+    try {
+      await fetch(apiUrl(`/api/families/${familyId}/push/test`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          excludeMemberId: memberId,
+          title: 'Family Shop',
+          body: 'Notifications on — you’ll get alerts when family updates the list.',
+        }),
+      })
+    } catch {
+      /* test push is best-effort */
+    }
+
+    // Local confirmation so this device also sees a notification immediately
     try {
       await reg.showNotification('Family Shop', {
-        body: 'Notifications on — you’ll hear when family updates the list.',
+        body: 'Notifications on for this device.',
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag: 'family-shop-enabled',
@@ -115,7 +147,11 @@ export async function enablePushNotifications(
       /* ignore show failure */
     }
 
-    return { ok: true, message: 'Push notifications enabled for this device' }
+    return {
+      ok: true,
+      message:
+        'Push enabled. Each family member must turn this on on their own phone.',
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Subscribe failed'
     return {

@@ -306,8 +306,9 @@ export function SettingsView() {
         </h2>
         <p className="mt-2 text-sm text-slate-500">
           Get a ping when someone adds items, checks things off, or starts the
-          usual shop. On iPhone you must use the <strong>Add to Home Screen</strong>{' '}
-          app (not plain Safari tabs).
+          usual shop. <strong>Every person</strong> needs to turn this on on
+          their own phone. On iPhone you must use the{' '}
+          <strong>Add to Home Screen</strong> app (not plain Safari tabs).
         </p>
 
         {!family ? (

@@ -1,8 +1,14 @@
 /**
- * Web Push via the `web-push` package (nodejs_compat on Cloudflare Workers).
+ * Web Push via Web Crypto (works on Cloudflare Workers).
+ * Replaces the Node-only `web-push` package which fails silently on edge
+ * (crypto.createECDH is not a function).
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-import webpush from 'web-push'
+import {
+  buildPushPayload,
+  type PushMessage,
+  type PushSubscription,
+  type VapidKeys,
+} from '@block65/webcrypto-web-push'
 
 export type StoredPushSub = {
   endpoint: string
@@ -18,37 +24,52 @@ export async function sendWebPush(opts: {
   subject?: string
 }): Promise<{ ok: boolean; status: number; error?: string; gone?: boolean }> {
   try {
-    webpush.setVapidDetails(
-      opts.subject || 'mailto:cortenliving@gmail.com',
-      opts.vapidPublicKey,
-      opts.vapidPrivateKey,
-    )
+    const vapid: VapidKeys = {
+      subject: opts.subject || 'mailto:cortenliving@gmail.com',
+      publicKey: opts.vapidPublicKey,
+      privateKey: opts.vapidPrivateKey,
+    }
 
-    const result = await webpush.sendNotification(
-      {
-        endpoint: opts.subscription.endpoint,
-        keys: {
-          p256dh: opts.subscription.p256dh,
-          auth: opts.subscription.auth,
-        },
+    const subscription: PushSubscription = {
+      endpoint: opts.subscription.endpoint,
+      expirationTime: null,
+      keys: {
+        p256dh: opts.subscription.p256dh,
+        auth: opts.subscription.auth,
       },
-      opts.payload,
-      {
-        TTL: 86400,
-        urgency: 'normal',
-        headers: {},
-      },
-    )
+    }
 
-    return { ok: true, status: result.statusCode || 201 }
+    // buildPushPayload expects message data as a string (JSON body for the SW)
+    const message: PushMessage = {
+      data: opts.payload,
+      options: {
+        ttl: 86400,
+        urgency: 'high',
+      },
+    }
+
+    const init = await buildPushPayload(message, subscription, vapid)
+    const res = await fetch(subscription.endpoint, init)
+    const status = res.status
+
+    if (status === 201 || status === 200) {
+      return { ok: true, status }
+    }
+
+    return {
+      ok: false,
+      status,
+      gone: status === 404 || status === 410,
+      error: (await res.text().catch(() => '')) || `HTTP ${status}`,
+    }
   } catch (e: unknown) {
-    const err = e as { statusCode?: number; body?: string; message?: string }
+    const err = e as { statusCode?: number; message?: string }
     const status = err.statusCode || 0
     return {
       ok: false,
       status,
       gone: status === 404 || status === 410,
-      error: err.body || err.message || 'push failed',
+      error: err.message || 'push failed',
     }
   }
 }
