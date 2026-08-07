@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  BrowserMultiFormatReader,
-  type IScannerControls,
-} from '@zxing/browser'
+import { BrowserMultiFormatReader } from '@zxing/browser'
 import {
   BarcodeFormat,
   DecodeHintType,
   NotFoundException,
-  ChecksumException,
-  FormatException,
 } from '@zxing/library'
 
 interface Props {
@@ -16,7 +11,6 @@ interface Props {
   onClose: () => void
 }
 
-/** Formats most supermarket packaging uses. */
 const GROCERY_FORMATS = [
   BarcodeFormat.EAN_13,
   BarcodeFormat.EAN_8,
@@ -25,28 +19,81 @@ const GROCERY_FORMATS = [
   BarcodeFormat.CODE_128,
   BarcodeFormat.CODE_39,
   BarcodeFormat.ITF,
-  BarcodeFormat.CODABAR,
   BarcodeFormat.QR_CODE,
-  BarcodeFormat.DATA_MATRIX,
 ]
 
-function buildHints(): Map<DecodeHintType, unknown> {
-  const hints = new Map<DecodeHintType, unknown>()
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, GROCERY_FORMATS)
-  hints.set(DecodeHintType.TRY_HARDER, true)
-  return hints
+/** Basic EAN/UPC check digit (works for EAN-13 / UPC-A). */
+function looksLikeProductCode(code: string): boolean {
+  const digits = code.replace(/\D/g, '')
+  if (digits.length === 8 || digits.length === 12 || digits.length === 13) {
+    return true
+  }
+  // CODE-128 etc.
+  return code.trim().length >= 6
+}
+
+function eanChecksumOk(code: string): boolean {
+  const d = code.replace(/\D/g, '')
+  if (d.length !== 8 && d.length !== 12 && d.length !== 13) return true
+  const body = d.slice(0, -1)
+  const check = Number(d.slice(-1))
+  let sum = 0
+  // right-to-left: odd positions *3, even *1 (GS1)
+  const chars = body.split('').reverse()
+  for (let i = 0; i < chars.length; i++) {
+    const n = Number(chars[i])
+    sum += i % 2 === 0 ? n * 3 : n
+  }
+  return (10 - (sum % 10)) % 10 === check
+}
+
+type NativeBarcodeDetector = {
+  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue: string }>>
+}
+
+function getNativeDetector(): NativeBarcodeDetector | null {
+  // Chrome/Android — excellent. Not on iOS Safari yet.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const BD = (window as any).BarcodeDetector
+  if (!BD) return null
+  try {
+    return new BD({
+      formats: [
+        'ean_13',
+        'ean_8',
+        'upc_a',
+        'upc_e',
+        'code_128',
+        'code_39',
+        'itf',
+        'qr_code',
+      ],
+    }) as NativeBarcodeDetector
+  } catch {
+    try {
+      return new BD() as NativeBarcodeDetector
+    } catch {
+      return null
+    }
+  }
 }
 
 /**
- * Reliable grocery barcode scanner using @zxing/browser continuous decode.
- * Much more stable on iPhone/Safari than a hand-rolled canvas loop.
+ * Mobile-first barcode scanner.
+ * - Native BarcodeDetector when available (Android Chrome)
+ * - ZXing continuous video decode (iOS Safari / PWA)
+ * - Full-frame decode (no crop mismatch with object-cover)
+ * - Single confirmed read for valid EAN checksums
  */
 export function BarcodeScanner({ onResult, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const onResultRef = useRef(onResult)
-  const controlsRef = useRef<IScannerControls | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const handled = useRef(false)
   const lastCandidate = useRef<{ code: string; count: number } | null>(null)
+  const loopRef = useRef(0)
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null)
+  const controlsRef = useRef<{ stop: () => void } | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState('Starting camera…')
@@ -54,13 +101,20 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
   const [torchOn, setTorchOn] = useState(false)
   const [torchSupported, setTorchSupported] = useState(false)
   const [scanning, setScanning] = useState(false)
+  const [engine, setEngine] = useState('')
 
   onResultRef.current = onResult
 
   const acceptCode = useCallback((raw: string) => {
     if (handled.current) return
     const code = raw.trim()
-    if (!code || code.length < 4) return
+    if (!looksLikeProductCode(code)) return
+
+    // Prefer valid check-digit codes immediately
+    const digits = code.replace(/\D/g, '')
+    const strong =
+      (digits.length === 8 || digits.length === 12 || digits.length === 13) &&
+      eanChecksumOk(digits)
 
     const prev = lastCandidate.current
     if (prev && prev.code === code) {
@@ -69,126 +123,213 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
       lastCandidate.current = { code, count: 1 }
     }
 
-    // Require 2 consecutive same reads to avoid flaky false positives
-    if ((lastCandidate.current?.count ?? 0) < 2) {
+    // 1 hit if checksum OK, else 2 matching hits
+    const need = strong ? 1 : 2
+    if ((lastCandidate.current?.count ?? 0) < need) {
       setStatus(`Hold steady… ${code}`)
       return
     }
 
     handled.current = true
-    setStatus(`Got it: ${code}`)
-    // Stop the scanner immediately
+    const finalCode = digits.length >= 8 ? digits : code
+    setStatus(`Got it: ${finalCode}`)
     try {
       controlsRef.current?.stop()
     } catch {
       /* ignore */
     }
-    controlsRef.current = null
-    // Tiny delay so user sees confirmation
-    window.setTimeout(() => onResultRef.current(code), 120)
+    window.setTimeout(() => onResultRef.current(finalCode), 100)
   }, [])
 
   useEffect(() => {
     let active = true
-    // hints + timeBetweenScansMillis (works across @zxing/browser versions)
-    const reader = new BrowserMultiFormatReader(buildHints(), 100)
+    const nativeDetector = getNativeDetector()
 
     const start = async () => {
       try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Camera API not available')
+        }
+
         setStatus('Requesting camera…')
+
+        // iOS-friendly: don't over-constrain resolution first
+        const constraintAttempts: MediaStreamConstraints[] = [
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          },
+          {
+            audio: false,
+            video: { facingMode: 'environment' },
+          },
+          {
+            audio: false,
+            video: true,
+          },
+        ]
+
+        let stream: MediaStream | null = null
+        let lastErr: unknown
+        for (const c of constraintAttempts) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia(c)
+            break
+          } catch (e) {
+            lastErr = e
+          }
+        }
+        if (!stream) throw lastErr ?? new Error('No camera')
+
+        if (!active) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+
+        streamRef.current = stream
+        const track = stream.getVideoTracks()[0] ?? null
+
+        if (track) {
+          const caps = track.getCapabilities?.() as
+            | { torch?: boolean }
+            | undefined
+          setTorchSupported(Boolean(caps && 'torch' in caps && caps.torch))
+          try {
+            await track.applyConstraints({
+              advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
+            })
+          } catch {
+            /* ignore */
+          }
+        }
 
         const video = videoRef.current
         if (!video) return
 
+        // Critical for iOS
         video.setAttribute('playsinline', 'true')
         video.setAttribute('webkit-playsinline', 'true')
         video.muted = true
         video.playsInline = true
+        video.autoplay = true
+        video.srcObject = stream
 
-        // Prefer rear camera with decent resolution
-        const constraints: MediaStreamConstraints = {
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        }
+        // Wait until we have frames
+        await new Promise<void>((resolve, reject) => {
+          const t = window.setTimeout(
+            () => reject(new Error('Camera timed out')),
+            12000,
+          )
+          const done = () => {
+            window.clearTimeout(t)
+            resolve()
+          }
+          if (video.readyState >= 2 && video.videoWidth > 0) {
+            done()
+            return
+          }
+          video.onloadedmetadata = () => {
+            void video
+              .play()
+              .then(done)
+              .catch(() => done())
+          }
+          void video.play().catch(() => {
+            /* wait for metadata */
+          })
+        })
 
-        const controls = await reader.decodeFromConstraints(
-          constraints,
-          video,
-          (result, err) => {
+        if (!active) return
+
+        setScanning(true)
+        setStatus('Point at the barcode — fill the green box')
+
+        // ---------- Path A: Native BarcodeDetector (Android Chrome) ----------
+        if (nativeDetector) {
+          setEngine('Native')
+          const tick = async () => {
             if (!active || handled.current) return
-
-            if (result) {
-              const text = result.getText()
-              if (text) acceptCode(text)
-              return
-            }
-
-            // Expected "nothing found" errors — ignore
-            if (
-              err instanceof NotFoundException ||
-              err instanceof ChecksumException ||
-              err instanceof FormatException
-            ) {
-              return
-            }
-            if (err && typeof err === 'object' && 'name' in err) {
-              const name = String((err as { name: string }).name)
-              if (
-                name === 'NotFoundException' ||
-                name === 'ChecksumException' ||
-                name === 'FormatException' ||
-                (typeof (err as { message?: string }).message === 'string' &&
-                  (err as { message: string }).message.includes(
-                    'No MultiFormat Readers were able',
-                  ))
-              ) {
-                return
+            try {
+              if (video.readyState >= 2 && video.videoWidth > 0) {
+                const codes = await nativeDetector.detect(video)
+                if (codes?.length) {
+                  const v = codes[0]?.rawValue
+                  if (v) acceptCode(v)
+                }
               }
+            } catch {
+              /* keep scanning */
             }
-          },
-        )
-
-        if (!active) {
-          controls.stop()
+            if (active && !handled.current) {
+              loopRef.current = window.setTimeout(() => void tick(), 80)
+            }
+          }
+          void tick()
           return
         }
 
-        controlsRef.current = controls
-        setScanning(true)
-        setStatus('Point at the barcode — hold steady')
+        // ---------- Path B: ZXing continuous decode (iOS + others) ----------
+        setEngine('ZXing')
+        const hints = new Map()
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, GROCERY_FORMATS)
+        hints.set(DecodeHintType.TRY_HARDER, true)
 
-        // Probe torch support after stream is live
+        const reader = new BrowserMultiFormatReader(hints, {
+          delayBetweenScanAttempts: 80,
+          delayBetweenScanSuccess: 300,
+          tryPlayVideoTimeout: 10000,
+        })
+        readerRef.current = reader
+
+        // decodeFromStream is reliable when we already have the stream
+        // Fall back to decodeFromConstraints / decodeFromVideoDevice
         try {
-          const stream = video.srcObject as MediaStream | null
-          const track = stream?.getVideoTracks()?.[0]
-          if (track) {
-            const caps = track.getCapabilities?.() as
-              | { torch?: boolean }
-              | undefined
-            setTorchSupported(Boolean(caps && 'torch' in caps && caps.torch))
-            // Prefer continuous autofocus when available
-            try {
-              await track.applyConstraints({
-                // @ts-expect-error focusMode is not in all TS DOM libs
-                advanced: [{ focusMode: 'continuous' }],
-              })
-            } catch {
-              /* ignore */
-            }
-          }
+          controlsRef.current = await reader.decodeFromStream(
+            stream,
+            video,
+            (result, err) => {
+              if (!active || handled.current) return
+              if (result) {
+                acceptCode(result.getText())
+                return
+              }
+              // Swallow NotFound — normal while aiming
+              if (err && !(err instanceof NotFoundException)) {
+                const name = (err as { name?: string }).name
+                if (
+                  name &&
+                  name !== 'NotFoundException' &&
+                  name !== 'ChecksumException' &&
+                  name !== 'FormatException'
+                ) {
+                  // ignore transient decode errors
+                }
+              }
+            },
+          )
         } catch {
-          /* ignore */
+          // Fallback: decodeFromVideoElement continuous
+          controlsRef.current = await reader.decodeFromVideoElement(
+            video,
+            (result) => {
+              if (!active || handled.current) return
+              if (result) acceptCode(result.getText())
+            },
+          )
         }
+
+        setStatus('Scanning… hold barcode steady in the box')
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
+        const denied = /Permission|NotAllowed|denied|secure/i.test(msg)
         setError(
-          /Permission|NotAllowed|denied/i.test(msg)
-            ? 'Camera access denied. In iPhone Settings → Safari → Camera, allow access — or type the barcode below.'
-            : 'Could not start camera. Type the barcode below instead.',
+          denied
+            ? 'Camera blocked. On iPhone: Settings → Safari → Camera → Allow, then reopen the app from the Home Screen icon. Or type the numbers below.'
+            : `Camera error: ${msg}. You can type the barcode below.`,
         )
         setStatus('Camera unavailable')
       }
@@ -198,7 +339,7 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
 
     return () => {
       active = false
-      handled.current = true
+      window.clearTimeout(loopRef.current)
       try {
         controlsRef.current?.stop()
       } catch {
@@ -206,10 +347,13 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
       }
       controlsRef.current = null
       try {
-        reader.reset()
+        // @ts-expect-error reset exists on browser reader
+        readerRef.current?.reset?.()
       } catch {
         /* ignore */
       }
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
       if (videoRef.current) {
         videoRef.current.srcObject = null
       }
@@ -217,15 +361,12 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
   }, [acceptCode])
 
   const toggleTorch = async () => {
-    const video = videoRef.current
-    const stream = video?.srcObject as MediaStream | null
-    const track = stream?.getVideoTracks()?.[0]
+    const track = streamRef.current?.getVideoTracks()[0]
     if (!track) return
     const next = !torchOn
     try {
       await track.applyConstraints({
-        // @ts-expect-error torch is not in all TS DOM libs
-        advanced: [{ torch: next }],
+        advanced: [{ torch: next } as MediaTrackConstraintSet],
       })
       setTorchOn(next)
     } catch {
@@ -236,7 +377,12 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black">
       <div className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
-        <h2 className="text-base font-semibold">Scan barcode</h2>
+        <div>
+          <h2 className="text-base font-semibold">Scan barcode</h2>
+          {engine ? (
+            <p className="text-[10px] text-slate-400">{engine} engine</p>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           {torchSupported ? (
             <button
@@ -259,31 +405,29 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
         </div>
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
         <video
           ref={videoRef}
           className="h-full w-full object-cover"
           muted
           playsInline
           autoPlay
+          {...{ 'webkit-playsinline': 'true' }}
         />
 
-        {/* Wide viewfinder for 1D grocery barcodes */}
+        {/* Guide only — decoding uses full frame so aim doesn't have to be perfect */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <div className="relative w-[92%] max-w-md">
+          <div className="relative w-[90%] max-w-sm">
             <div
-              className="h-28 w-full rounded-2xl border-2 border-teal-400"
-              style={{
-                boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)',
-              }}
+              className="h-36 w-full rounded-2xl border-[3px] border-teal-400"
+              style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)' }}
             />
-            {/* Scan line animation */}
             {scanning && !handled.current ? (
-              <div className="absolute inset-x-3 top-1/2 h-0.5 -translate-y-1/2 animate-pulse bg-teal-300/90" />
+              <div className="absolute inset-x-4 top-1/2 h-0.5 -translate-y-1/2 bg-teal-300/90 shadow-[0_0_12px_#5eead4]" />
             ) : null}
           </div>
           <p className="mt-4 max-w-xs px-4 text-center text-sm font-medium text-white drop-shadow">
-            Fill the box with the barcode (sideways is fine)
+            Line up the bars inside the box · keep still for a second
           </p>
         </div>
       </div>
@@ -298,7 +442,7 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
           <p className="text-center text-sm text-slate-300">{status}</p>
         )}
         <p className="text-center text-[11px] text-slate-500">
-          Tip: good light, hold 10–20 cm away, keep the whole barcode in the box
+          Use good light · hold ~15 cm away · try landscape if it won’t lock
         </p>
         <form
           className="flex gap-2"
