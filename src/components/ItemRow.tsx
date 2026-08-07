@@ -83,52 +83,42 @@ export function ShopRow({
 }: ShopRowProps) {
   const cat = categoryMeta(master?.category ?? 'other')
   const name = master?.name ?? 'Unknown item'
-  // Match Master list thumbnail size (slightly larger in Shop mode)
+  // Same single thumbnail as Master list (no separate checkbox box)
   const thumbClass = large ? 'size-14' : 'size-11'
-  const checkClass = large ? 'size-7' : 'size-6'
   return (
     <div
       className={`flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 ${
         large ? 'px-3 py-4' : 'px-3 py-3'
       }`}
     >
-      {/* Small circular checkbox — not a second icon box */}
       <button
         type="button"
         onClick={onToggle}
-        className={`flex ${checkClass} shrink-0 items-center justify-center rounded-full border-2 transition ${
-          shopping.checked
-            ? 'border-teal-600 bg-teal-600 text-white'
-            : 'border-slate-300 bg-transparent dark:border-slate-500'
-        }`}
+        className={`relative ${thumbClass} shrink-0 overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800`}
         aria-label={shopping.checked ? 'Uncheck' : 'Check off'}
-      >
-        {shopping.checked ? (
-          <span className={large ? 'text-sm font-bold' : 'text-xs font-bold'}>
-            ✓
-          </span>
-        ) : null}
-      </button>
-
-      {/* Product photo — same style as Master list */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`${thumbClass} shrink-0 overflow-hidden rounded-xl ${
-          shopping.checked ? 'opacity-50' : ''
-        }`}
       >
         {master?.imageUrl ? (
           <img
             src={master.imageUrl}
             alt=""
-            className="size-full object-cover bg-slate-100"
+            className={`size-full object-cover ${shopping.checked ? 'opacity-40' : ''}`}
           />
         ) : (
-          <span className="flex size-full items-center justify-center bg-slate-100 text-lg dark:bg-slate-800">
+          <span
+            className={`flex size-full items-center justify-center text-lg ${
+              shopping.checked ? 'opacity-40' : ''
+            }`}
+          >
             {cat.emoji}
           </span>
         )}
+        {shopping.checked ? (
+          <span className="absolute inset-0 flex items-center justify-center bg-teal-600/80 text-white">
+            <span className={large ? 'text-2xl font-bold' : 'text-lg font-bold'}>
+              ✓
+            </span>
+          </span>
+        ) : null}
       </button>
 
       <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-left">
