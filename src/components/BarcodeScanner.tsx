@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  BrowserMultiFormatReader,
+  type IScannerControls,
+} from '@zxing/browser'
+import {
   BarcodeFormat,
-  BinaryBitmap,
   DecodeHintType,
-  HybridBinarizer,
-  MultiFormatReader,
-  RGBLuminanceSource,
   NotFoundException,
   ChecksumException,
   FormatException,
@@ -30,31 +30,23 @@ const GROCERY_FORMATS = [
   BarcodeFormat.DATA_MATRIX,
 ]
 
-function buildReader(): MultiFormatReader {
+function buildHints(): Map<DecodeHintType, unknown> {
   const hints = new Map<DecodeHintType, unknown>()
   hints.set(DecodeHintType.POSSIBLE_FORMATS, GROCERY_FORMATS)
   hints.set(DecodeHintType.TRY_HARDER, true)
-  // Don't require EAN extensions — most grocery packs don't have them
-  const reader = new MultiFormatReader()
-  reader.setHints(hints)
-  return reader
+  return hints
 }
 
 /**
- * High-reliability grocery barcode scanner.
- * Crops to a wide centre band (best for EAN/UPC), upscales, and
- * runs continuous decode with confirmation — much better on iPhone
- * than full-frame zxing defaults.
+ * Reliable grocery barcode scanner using @zxing/browser continuous decode.
+ * Much more stable on iPhone/Safari than a hand-rolled canvas loop.
  */
 export function BarcodeScanner({ onResult, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const onResultRef = useRef(onResult)
-  const streamRef = useRef<MediaStream | null>(null)
+  const controlsRef = useRef<IScannerControls | null>(null)
   const handled = useRef(false)
   const lastCandidate = useRef<{ code: string; count: number } | null>(null)
-  const rafRef = useRef<number>(0)
-  const lastDecodeAt = useRef(0)
 
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState('Starting camera…')
@@ -67,7 +59,6 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
 
   const acceptCode = useCallback((raw: string) => {
     if (handled.current) return
-    // Keep digits for product barcodes; allow alphanumeric for CODE128 etc.
     const code = raw.trim()
     if (!code || code.length < 4) return
 
@@ -86,199 +77,112 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
 
     handled.current = true
     setStatus(`Got it: ${code}`)
+    // Stop the scanner immediately
+    try {
+      controlsRef.current?.stop()
+    } catch {
+      /* ignore */
+    }
+    controlsRef.current = null
     // Tiny delay so user sees confirmation
     window.setTimeout(() => onResultRef.current(code), 120)
   }, [])
 
-  const decodeFrame = useCallback(() => {
-    if (handled.current) return
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    if (!video || !canvas || video.readyState < 2) return
-
-    const now = performance.now()
-    // ~8–12 attempts/sec is enough; keeps CPU cooler on phones
-    if (now - lastDecodeAt.current < 90) return
-    lastDecodeAt.current = now
-
-    const vw = video.videoWidth
-    const vh = video.videoHeight
-    if (!vw || !vh) return
-
-    // Wide horizontal ROI — matches EAN-13 strips better than a square box
-    const roiW = Math.floor(vw * 0.88)
-    const roiH = Math.floor(vh * 0.28)
-    const sx = Math.floor((vw - roiW) / 2)
-    const sy = Math.floor((vh - roiH) / 2)
-
-    // Upscale for thin print on packaging
-    const scale = 2
-    const dw = roiW * scale
-    const dh = roiH * scale
-    canvas.width = dw
-    canvas.height = dh
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
-    if (!ctx) return
-
-    ctx.imageSmoothingEnabled = false
-    ctx.drawImage(video, sx, sy, roiW, roiH, 0, 0, dw, dh)
-
-    // Try normal + inverted (some packs print light-on-dark / glossy)
-    const attempts: ImageData[] = []
-    attempts.push(ctx.getImageData(0, 0, dw, dh))
-
-    // Contrast boost into a second buffer
-    const boosted = ctx.getImageData(0, 0, dw, dh)
-    const d = boosted.data
-    for (let i = 0; i < d.length; i += 4) {
-      const g = 0.299 * d[i]! + 0.587 * d[i + 1]! + 0.114 * d[i + 2]!
-      // stretch contrast
-      const v = Math.max(0, Math.min(255, (g - 100) * 1.6 + 128))
-      d[i] = d[i + 1] = d[i + 2] = v
-    }
-    attempts.push(boosted)
-
-    // Inverted
-    const inv = ctx.getImageData(0, 0, dw, dh)
-    const id = inv.data
-    for (let i = 0; i < id.length; i += 4) {
-      id[i] = 255 - id[i]!
-      id[i + 1] = 255 - id[i + 1]!
-      id[i + 2] = 255 - id[i + 2]!
-    }
-    attempts.push(inv)
-
-    const reader = buildReader()
-
-    for (const imageData of attempts) {
-      try {
-        const luminances = new Uint8ClampedArray(dw * dh)
-        const px = imageData.data
-        for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-          luminances[j] =
-            (px[i]! * 306 + px[i + 1]! * 601 + px[i + 2]! * 117) >> 10
-        }
-        const source = new RGBLuminanceSource(luminances, dw, dh)
-        const bitmap = new BinaryBitmap(new HybridBinarizer(source))
-        const result = reader.decodeWithState(bitmap)
-        const text = result.getText()
-        if (text) {
-          acceptCode(text)
-          return
-        }
-      } catch (e) {
-        if (
-          e instanceof NotFoundException ||
-          e instanceof ChecksumException ||
-          e instanceof FormatException
-        ) {
-          // expected when no barcode in frame
-        } else if (e && typeof e === 'object' && 'name' in e) {
-          const name = String((e as { name: string }).name)
-          if (
-            name === 'NotFoundException' ||
-            name === 'ChecksumException' ||
-            name === 'FormatException'
-          ) {
-            // ignore
-          }
-        }
-      } finally {
-        reader.reset()
-      }
-    }
-  }, [acceptCode])
-
   useEffect(() => {
     let active = true
-    let track: MediaStreamTrack | null = null
+    // hints + timeBetweenScansMillis (works across @zxing/browser versions)
+    const reader = new BrowserMultiFormatReader(buildHints(), 100)
 
     const start = async () => {
       try {
         setStatus('Requesting camera…')
 
-        // Prefer rear camera + high res for small barcode print
-        const constraintsList: MediaStreamConstraints[] = [
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-            },
-          },
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          {
-            audio: false,
-            video: { facingMode: 'environment' },
-          },
-          {
-            audio: false,
-            video: true,
-          },
-        ]
-
-        let stream: MediaStream | null = null
-        let lastErr: unknown
-        for (const c of constraintsList) {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia(c)
-            break
-          } catch (e) {
-            lastErr = e
-          }
-        }
-        if (!stream) throw lastErr ?? new Error('No camera')
-
-        if (!active) {
-          stream.getTracks().forEach((t) => t.stop())
-          return
-        }
-
-        streamRef.current = stream
-        track = stream.getVideoTracks()[0] ?? null
-
-        // Torch support
-        if (track) {
-          const caps = track.getCapabilities?.() as
-            | { torch?: boolean; focusMode?: string[] }
-            | undefined
-          setTorchSupported(Boolean(caps && 'torch' in caps && caps.torch))
-          // Try continuous focus (not in standard TS DOM types)
-          try {
-            await track.applyConstraints({
-              advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
-            })
-          } catch {
-            /* ignore */
-          }
-        }
-
         const video = videoRef.current
         if (!video) return
+
         video.setAttribute('playsinline', 'true')
         video.setAttribute('webkit-playsinline', 'true')
         video.muted = true
         video.playsInline = true
-        video.srcObject = stream
-        await video.play()
 
+        // Prefer rear camera with decent resolution
+        const constraints: MediaStreamConstraints = {
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        }
+
+        const controls = await reader.decodeFromConstraints(
+          constraints,
+          video,
+          (result, err) => {
+            if (!active || handled.current) return
+
+            if (result) {
+              const text = result.getText()
+              if (text) acceptCode(text)
+              return
+            }
+
+            // Expected "nothing found" errors — ignore
+            if (
+              err instanceof NotFoundException ||
+              err instanceof ChecksumException ||
+              err instanceof FormatException
+            ) {
+              return
+            }
+            if (err && typeof err === 'object' && 'name' in err) {
+              const name = String((err as { name: string }).name)
+              if (
+                name === 'NotFoundException' ||
+                name === 'ChecksumException' ||
+                name === 'FormatException' ||
+                (typeof (err as { message?: string }).message === 'string' &&
+                  (err as { message: string }).message.includes(
+                    'No MultiFormat Readers were able',
+                  ))
+              ) {
+                return
+              }
+            }
+          },
+        )
+
+        if (!active) {
+          controls.stop()
+          return
+        }
+
+        controlsRef.current = controls
         setScanning(true)
         setStatus('Point at the barcode — hold steady')
 
-        const loop = () => {
-          if (!active || handled.current) return
-          decodeFrame()
-          rafRef.current = window.setTimeout(loop, 50) as unknown as number
+        // Probe torch support after stream is live
+        try {
+          const stream = video.srcObject as MediaStream | null
+          const track = stream?.getVideoTracks()?.[0]
+          if (track) {
+            const caps = track.getCapabilities?.() as
+              | { torch?: boolean }
+              | undefined
+            setTorchSupported(Boolean(caps && 'torch' in caps && caps.torch))
+            // Prefer continuous autofocus when available
+            try {
+              await track.applyConstraints({
+                // @ts-expect-error focusMode is not in all TS DOM libs
+                advanced: [{ focusMode: 'continuous' }],
+              })
+            } catch {
+              /* ignore */
+            }
+          }
+        } catch {
+          /* ignore */
         }
-        loop()
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         setError(
@@ -294,20 +198,34 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
 
     return () => {
       active = false
-      window.clearTimeout(rafRef.current)
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-      if (videoRef.current) videoRef.current.srcObject = null
+      handled.current = true
+      try {
+        controlsRef.current?.stop()
+      } catch {
+        /* ignore */
+      }
+      controlsRef.current = null
+      try {
+        reader.reset()
+      } catch {
+        /* ignore */
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
     }
-  }, [decodeFrame])
+  }, [acceptCode])
 
   const toggleTorch = async () => {
-    const track = streamRef.current?.getVideoTracks()[0]
+    const video = videoRef.current
+    const stream = video?.srcObject as MediaStream | null
+    const track = stream?.getVideoTracks()?.[0]
     if (!track) return
     const next = !torchOn
     try {
       await track.applyConstraints({
-        advanced: [{ torch: next } as MediaTrackConstraintSet],
+        // @ts-expect-error torch is not in all TS DOM libs
+        advanced: [{ torch: next }],
       })
       setTorchOn(next)
     } catch {
@@ -349,14 +267,12 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
           playsInline
           autoPlay
         />
-        {/* Hidden processing canvas */}
-        <canvas ref={canvasRef} className="hidden" />
 
         {/* Wide viewfinder for 1D grocery barcodes */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <div className="relative w-[92%] max-w-md">
             <div
-              className="h-28 w-full rounded-2xl border-2 border-teal-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+              className="h-28 w-full rounded-2xl border-2 border-teal-400"
               style={{
                 boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)',
               }}
