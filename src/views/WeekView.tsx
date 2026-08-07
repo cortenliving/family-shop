@@ -43,11 +43,6 @@ export function WeekView() {
       .length
   }, [masterItems, shoppingItems])
 
-  const hasUsualHabits = useMemo(
-    () => usualShopCandidates(masterItems).length > 0,
-    [masterItems],
-  )
-
   const { todo, bought } = useMemo(() => {
     const byName = (a: (typeof shoppingItems)[number], b: (typeof shoppingItems)[number]) => {
       const nameA = masterById.get(a.masterItemId)?.name ?? ''
@@ -96,21 +91,14 @@ export function WeekView() {
 
         <SharingBanner compact />
 
-        {hasUsualHabits ? (
+        {usualMissing > 0 ? (
           <button
             type="button"
             onClick={() => addUsualShop()}
-            disabled={usualMissing === 0}
-            className={`mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold active:scale-[0.99] ${
-              usualMissing === 0
-                ? 'bg-slate-100 text-slate-400 dark:bg-slate-800'
-                : 'bg-amber-100 text-amber-950 ring-1 ring-amber-300 dark:bg-amber-950/50 dark:text-amber-50 dark:ring-amber-800'
-            }`}
+            className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-100 text-sm font-bold text-amber-950 ring-1 ring-amber-300 active:scale-[0.99] dark:bg-amber-950/50 dark:text-amber-50 dark:ring-amber-800"
           >
             <span aria-hidden>★</span>
-            {usualMissing === 0
-              ? 'Usual shop already on the list'
-              : `Usual shop · add ${usualMissing} regular item${usualMissing === 1 ? '' : 's'}`}
+            {`Usual shop · add ${usualMissing} regular item${usualMissing === 1 ? '' : 's'}`}
           </button>
         ) : null}
 
