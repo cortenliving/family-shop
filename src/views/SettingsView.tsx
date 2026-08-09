@@ -141,8 +141,17 @@ export function SettingsView() {
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                Status: {syncStatus}
-                {hasRemoteApi() ? ' · cloud connected' : ' · this device only'}
+                Status:{' '}
+                {syncStatus === 'live'
+                  ? 'live (synced)'
+                  : syncStatus === 'error'
+                    ? 'error (cloud save failed — try Pull latest, or re-open app)'
+                    : syncStatus === 'syncing'
+                      ? 'syncing…'
+                      : syncStatus === 'offline'
+                        ? 'offline (will retry)'
+                        : syncStatus}
+                {hasRemoteApi() ? ' · cloud API on' : ' · this device only'}
               </p>
             </div>
 

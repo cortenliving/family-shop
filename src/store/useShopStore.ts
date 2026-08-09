@@ -284,7 +284,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
         if (hasRemoteApi()) {
           set({ syncStatus: 'syncing' })
           const notify = state.pendingNotify
-          const ok = await remotePushSnapshot(snap, {
+          const result = await remotePushSnapshot(snap, {
             notify: notify
               ? {
                   title: notify.title,
@@ -294,17 +294,32 @@ export const useShopStore = create<ShopState>((set, get) => ({
               : undefined,
           })
 
-          set({
-            syncStatus: ok ? 'live' : 'error',
-            lastSyncedAt: ok ? Date.now() : state.lastSyncedAt,
-            pendingNotify: ok ? null : state.pendingNotify,
-          })
-          if (ok) void get().refreshMembers()
-          // User added more items while this request was in flight — push again
-          if (ok && localMutationGen !== genAtStart) {
-            persistInFlight = false
-            await get().persist()
-            return
+          if (result.ok) {
+            set({
+              syncStatus: 'live',
+              lastSyncedAt: Date.now(),
+              pendingNotify: null,
+            })
+            void get().refreshMembers()
+            // User added more items while this request was in flight — push again
+            if (localMutationGen !== genAtStart) {
+              persistInFlight = false
+              await get().persist()
+              return
+            }
+          } else if (result.code === 'EMPTY_MASTER_REJECTED') {
+            // Cloud still has products; pull them instead of showing a hard error
+            set({ syncStatus: 'syncing', pendingNotify: state.pendingNotify })
+            await get().pullRemote()
+          } else {
+            set({
+              syncStatus: 'error',
+              lastSyncedAt: state.lastSyncedAt,
+              pendingNotify: state.pendingNotify,
+            })
+            if (result.error) {
+              get().showToast(`Sync error: ${result.error.slice(0, 80)}`)
+            }
           }
         }
       }
@@ -829,7 +844,8 @@ export const useShopStore = create<ShopState>((set, get) => ({
           void get().refreshMembers()
         } else if (status === 'connecting') set({ syncStatus: 'syncing' })
         else if (status === 'error')
-          set({ syncStatus: hasRemoteApi() ? 'error' : 'local' })
+          // Socket glitch — don't sticky "error" if list is still usable
+          set({ syncStatus: hasRemoteApi() ? 'offline' : 'local' })
         else if (status === 'closed' && hasRemoteApi()) set({ syncStatus: 'offline' })
       },
     })

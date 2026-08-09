@@ -73,13 +73,22 @@ export async function remoteJoinFamily(
   }
 }
 
+export type PushSnapshotResult = {
+  ok: boolean
+  status?: number
+  code?: string
+  error?: string
+}
+
 export async function remotePushSnapshot(
   snapshot: AppSnapshot,
   opts?: {
     notify?: { title: string; body: string; excludeMemberId?: string }
   },
-): Promise<boolean> {
-  if (!hasRemoteApi() || !snapshot.family) return false
+): Promise<PushSnapshotResult> {
+  if (!hasRemoteApi() || !snapshot.family) {
+    return { ok: false, error: 'No API' }
+  }
   try {
     const res = await fetch(apiUrl(`/api/families/${snapshot.family.id}/sync`), {
       method: 'PUT',
@@ -97,9 +106,22 @@ export async function remotePushSnapshot(
         notify: opts?.notify,
       }),
     })
-    return res.ok
-  } catch {
-    return false
+    if (res.ok) return { ok: true, status: res.status }
+    let code: string | undefined
+    let error: string | undefined
+    try {
+      const body = (await res.json()) as { code?: string; error?: string }
+      code = body.code
+      error = body.error
+    } catch {
+      error = `HTTP ${res.status}`
+    }
+    return { ok: false, status: res.status, code, error }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'Network error',
+    }
   }
 }
 

@@ -468,9 +468,26 @@ export default {
           }
         }
 
+        // Best-effort: ensure learning columns exist (no-op if already added)
+        try {
+          await env.DB.prepare(
+            'ALTER TABLE master_items ADD COLUMN week_add_count INTEGER NOT NULL DEFAULT 0',
+          ).run()
+        } catch {
+          /* already exists */
+        }
+        try {
+          await env.DB.prepare(
+            'ALTER TABLE master_items ADD COLUMN last_added_to_week_at INTEGER',
+          ).run()
+        } catch {
+          /* already exists */
+        }
+
         // Atomic replace: deletes + inserts in one D1 batch so a failed
         // insert cannot leave the family with no products.
-        const stmts: D1PreparedStatement[] = [
+        // Prefer schema with learning columns; fall back if migration missing.
+        const deleteStmts: D1PreparedStatement[] = [
           env.DB.prepare('DELETE FROM shopping_items WHERE family_id = ?').bind(
             familyId,
           ),
@@ -478,8 +495,27 @@ export default {
             familyId,
           ),
         ]
-        for (const m of masterItems) {
-          stmts.push(
+
+        const shopInserts: D1PreparedStatement[] = shoppingItems.map((s) =>
+          env.DB.prepare(
+            `INSERT INTO shopping_items
+            (id, family_id, master_item_id, quantity, notes, checked, checked_at, added_at, added_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            s.id,
+            familyId,
+            s.masterItemId,
+            s.quantity ?? '',
+            s.notes ?? '',
+            s.checked ? 1 : 0,
+            s.checkedAt ?? null,
+            s.addedAt,
+            s.addedBy ?? null,
+          ),
+        )
+
+        const masterInsertsWithLearning: D1PreparedStatement[] = masterItems.map(
+          (m) =>
             env.DB.prepare(
               `INSERT INTO master_items
               (id, family_id, name, brand, barcode, size_label, image_url, category, frequent, default_notes, week_add_count, last_added_to_week_at, created_at, updated_at)
@@ -500,28 +536,53 @@ export default {
               m.createdAt,
               m.updatedAt,
             ),
-          )
+        )
+
+        const masterInsertsLegacy: D1PreparedStatement[] = masterItems.map((m) =>
+          env.DB.prepare(
+            `INSERT INTO master_items
+            (id, family_id, name, brand, barcode, size_label, image_url, category, frequent, default_notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            m.id,
+            familyId,
+            m.name,
+            m.brand ?? null,
+            m.barcode ?? null,
+            m.sizeLabel ?? null,
+            m.imageUrl ?? null,
+            m.category,
+            m.frequent ? 1 : 0,
+            m.defaultNotes ?? null,
+            m.createdAt,
+            m.updatedAt,
+          ),
+        )
+
+        try {
+          await env.DB.batch([
+            ...deleteStmts,
+            ...masterInsertsWithLearning,
+            ...shopInserts,
+          ])
+        } catch (primaryErr) {
+          // Schema without learning columns (or transient D1 issue)
+          try {
+            await env.DB.batch([
+              ...deleteStmts,
+              ...masterInsertsLegacy,
+              ...shopInserts,
+            ])
+          } catch (legacyErr) {
+            const message =
+              legacyErr instanceof Error
+                ? legacyErr.message
+                : primaryErr instanceof Error
+                  ? primaryErr.message
+                  : 'Sync batch failed'
+            return json({ error: message, code: 'SYNC_BATCH_FAILED' }, 500)
+          }
         }
-        for (const s of shoppingItems) {
-          stmts.push(
-            env.DB.prepare(
-              `INSERT INTO shopping_items
-              (id, family_id, master_item_id, quantity, notes, checked, checked_at, added_at, added_by)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            ).bind(
-              s.id,
-              familyId,
-              s.masterItemId,
-              s.quantity ?? '',
-              s.notes ?? '',
-              s.checked ? 1 : 0,
-              s.checkedAt ?? null,
-              s.addedAt,
-              s.addedBy ?? null,
-            ),
-          )
-        }
-        await env.DB.batch(stmts)
 
         await broadcast(env, familyId)
 
