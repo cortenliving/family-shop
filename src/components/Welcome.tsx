@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { useShopStore } from '../store/useShopStore'
-import { MarkCart } from './icons'
-
 /** First screen when this phone is not in a family yet. */
 export function Welcome() {
   const createFamily = useShopStore((s) => s.createFamily)
@@ -12,18 +10,15 @@ export function Welcome() {
   const [busy, setBusy] = useState(false)
 
   return (
-    <div className="relative mx-auto flex min-h-dvh max-w-lg flex-col justify-end px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(3rem,env(safe-area-inset-top))]">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%), var(--paper)',
-        }}
-      />
+    <div className="market-wash relative mx-auto flex min-h-dvh max-w-lg flex-col justify-end px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(3rem,env(safe-area-inset-top))]">
       <div className="relative">
-        <MarkCart />
-        <h1 className="mt-6 text-[2rem] leading-tight text-ink">Family Shop</h1>
-        <p className="mt-2 max-w-sm text-base text-mute">
+        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-citrus">Sunday market</p>
+        <h1 className="mt-2 text-[3.4rem] leading-[0.9] font-semibold tracking-tight text-ink">
+          Family
+          <br />
+          Shop
+        </h1>
+        <p className="mt-4 max-w-sm text-lg text-ink/80">
           A shared list for this week. Checking something off never removes it from your Master library.
         </p>
 
@@ -47,7 +42,7 @@ export function Welcome() {
             <button
               type="submit"
               disabled={busy}
-              className="press min-h-14 w-full rounded-[16px] bg-accent text-base font-semibold text-white"
+              className="press min-h-14 w-full rounded-[16px] bg-citrus text-base font-semibold text-olive"
             >
               Create family
             </button>
@@ -81,7 +76,7 @@ export function Welcome() {
             <button
               type="submit"
               disabled={busy}
-              className="press min-h-14 w-full rounded-[16px] bg-accent text-base font-semibold text-white"
+              className="press min-h-14 w-full rounded-[16px] bg-citrus text-base font-semibold text-olive"
             >
               Join family
             </button>
@@ -98,14 +93,14 @@ export function Welcome() {
             <button
               type="button"
               onClick={() => setMode('create')}
-              className="press min-h-14 w-full rounded-[16px] bg-accent text-base font-semibold text-white"
+              className="press min-h-14 w-full rounded-[16px] bg-citrus text-base font-semibold text-olive"
             >
               Create family
             </button>
             <button
               type="button"
               onClick={() => setMode('join')}
-              className="press min-h-14 w-full rounded-[16px] bg-card text-base font-semibold text-ink shadow-card"
+              className="press min-h-14 w-full rounded-[16px] bg-[#FFF8EF]/80 text-base font-semibold text-olive"
             >
               I have a code
             </button>

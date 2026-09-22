@@ -43,7 +43,7 @@ export function SharingBanner({ compact }: { compact?: boolean }) {
       >
         <span
           className={`inline-block size-2 shrink-0 rounded-full ${
-            live ? 'bg-accent' : 'bg-amber-500'
+            live ? 'bg-citrus' : 'bg-tomato'
           }`}
           aria-hidden
         />

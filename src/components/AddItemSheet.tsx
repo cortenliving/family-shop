@@ -170,7 +170,7 @@ export function AddItemSheet({
             type="button"
             disabled={scanning}
             onClick={() => setScannerOpen(true)}
-            className="press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-[16px] bg-accent px-3 text-sm font-semibold text-white"
+            className="press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-[16px] bg-citrus px-3 text-sm font-semibold text-olive"
           >
             Scan barcode
           </button>
@@ -323,7 +323,7 @@ export function AddItemSheet({
         <button
           type="button"
           onClick={submit}
-          className="press min-h-14 w-full rounded-[16px] bg-accent text-base font-semibold text-white"
+          className="press min-h-14 w-full rounded-[16px] bg-citrus text-base font-semibold text-olive"
         >
           Save item
         </button>

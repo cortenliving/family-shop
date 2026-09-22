@@ -3,24 +3,30 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --paper: #f3f1ec;
-  --card: #ffffff;
-  --ink: #1c1917;
-  --mute: #78716c;
-  --accent: #0f766e;
-  --accent-soft: #ccfbf1;
-  --danger: #b42318;
+  --paper: #fff8ef;
+  --card: #fffdf8;
+  --ink: #1a1714;
+  --mute: #7a7168;
+  --olive: #1f3d2b;
+  --citrus: #f4b942;
+  --tomato: #e24a2c;
+  --accent: var(--olive);
+  --accent-soft: #efe4c4;
+  --danger: var(--tomato);
   color-scheme: light;
 }
 
 .dark {
-  --paper: #0c0a09;
-  --card: #1c1917;
-  --ink: #fafaf9;
-  --mute: #a8a29e;
-  --accent: #2dd4bf;
-  --accent-soft: #134e4a;
-  --danger: #fca5a5;
+  --paper: #101610;
+  --card: #1a2420;
+  --ink: #fff8ef;
+  --mute: #c4b8a8;
+  --olive: #1f3d2b;
+  --citrus: #f4b942;
+  --tomato: #ff8a73;
+  --accent: var(--citrus);
+  --accent-soft: #3a2e14;
+  --danger: var(--tomato);
   color-scheme: dark;
 }
 
@@ -30,6 +36,9 @@
   --color-card: var(--card);
   --color-ink: var(--ink);
   --color-mute: var(--mute);
+  --color-olive: var(--olive);
+  --color-citrus: var(--citrus);
+  --color-tomato: var(--tomato);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-danger: var(--danger);
@@ -95,4 +104,47 @@ textarea {
 
 .press:active {
   transform: scale(0.98);
+}
+
+.market-wash {
+  background:
+    radial-gradient(80% 50% at 10% 0%, #f4b942 0%, transparent 55%),
+    radial-gradient(70% 45% at 100% 12%, #e24a2c 0%, transparent 50%),
+    radial-gradient(90% 60% at 50% 100%, #1f3d2b 0%, transparent 62%),
+    #fff8ef;
+}
+
+.dark .market-wash {
+  background:
+    radial-gradient(80% 50% at 10% 0%, rgba(244, 185, 66, 0.45) 0%, transparent 55%),
+    radial-gradient(70% 45% at 100% 8%, rgba(226, 74, 44, 0.35) 0%, transparent 48%),
+    radial-gradient(90% 55% at 40% 100%, #1f3d2b 0%, transparent 60%),
+    #101610;
+}
+
+.wash-fruit-veg { background: #e4f3cf; }
+.wash-dairy { background: #dceef8; }
+.wash-meat { background: #fbe3d8; }
+.wash-bakery { background: #fde8c4; }
+.wash-pantry { background: #f3ead0; }
+.wash-freezer { background: #d9f3ee; }
+.wash-drinks { background: #f8e3b8; }
+.wash-household { background: #ece4f4; }
+.wash-other { background: #f3ece3; }
+
+.dark .wash-fruit-veg { background: #243528; }
+.dark .wash-dairy { background: #1c2c38; }
+.dark .wash-meat { background: #3a2420; }
+.dark .wash-bakery { background: #3a2e18; }
+.dark .wash-pantry { background: #2e2a1c; }
+.dark .wash-freezer { background: #16302c; }
+.dark .wash-drinks { background: #332816; }
+.dark .wash-household { background: #2a2433; }
+.dark .wash-other { background: #26221c; }
+
+.thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 1rem;
+  box-shadow: inset 0 0 0 1px rgba(26, 23, 20, 0.12);
 }

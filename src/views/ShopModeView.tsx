@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ShopRow, categoryMeta } from '../components/ItemRow'
+import { ShopRow, categoryMeta, categoryWash } from '../components/ItemRow'
 import { useShopStore } from '../store/useShopStore'
 import { CATEGORIES } from '../types'
 
@@ -53,11 +53,11 @@ export function ShopModeView() {
       <header className="sticky top-0 z-20 bg-paper/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h1 className="text-[1.65rem] leading-tight text-ink">In the store</h1>
+            <h1 className="text-[36px] leading-[1.02] tracking-tight text-ink">In the store</h1>
             <p className="text-sm text-mute">{grouped.todoCount} left</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
+            <span className="rounded-full bg-citrus px-3 py-1 text-xs font-semibold text-olive">
               One-hand shop
             </span>
             <button
@@ -82,7 +82,7 @@ export function ShopModeView() {
               <button
                 type="button"
                 onClick={clearChecked}
-                className="press min-h-14 rounded-[16px] bg-accent text-base font-semibold text-white"
+                className="press min-h-14 rounded-[16px] bg-citrus text-base font-semibold text-olive"
               >
                 Clear bought items
               </button>
@@ -98,8 +98,8 @@ export function ShopModeView() {
         </div>
       ) : (
         sections.map((c) => (
-          <section key={c.id} className="mt-2">
-            <h2 className="sticky top-[4.6rem] z-10 bg-paper/95 px-4 py-2 text-lg font-semibold text-ink backdrop-blur">
+          <section key={c.id} className={`mt-3 ${categoryWash(c.id)}`}>
+            <h2 className={`sticky top-[5.6rem] z-10 px-4 py-3 text-[22px] font-semibold text-ink ${categoryWash(c.id)}`}>
               {categoryMeta(c.id).emoji} {categoryMeta(c.id).label}
             </h2>
             {(grouped.map.get(c.id) ?? []).map((s) => (
@@ -124,7 +124,7 @@ export function ShopModeView() {
             <button
               type="button"
               onClick={clearChecked}
-              className="press min-h-11 text-sm font-semibold text-accent"
+              className="press min-h-11 text-sm font-semibold text-tomato"
             >
               Clear
             </button>

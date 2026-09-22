@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AddItemSheet } from '../components/AddItemSheet'
 import { IconCart, IconPlus } from '../components/icons'
-import { ShopRow, categoryMeta } from '../components/ItemRow'
+import { ShopRow, categoryMeta, categoryWash } from '../components/ItemRow'
 import { SharingBanner } from '../components/SharingStatus'
 import {
   recommendedForWeek,
@@ -76,11 +76,11 @@ export function WeekView() {
       <header className="sticky top-0 z-20 bg-paper/90 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="truncate text-[1.65rem] leading-tight text-ink">{family.name}</h1>
+            <h1 className="truncate text-[36px] leading-[1.02] tracking-tight text-ink">{family.name}</h1>
             <p className="mt-0.5 flex items-center gap-2 text-sm text-mute">
               <span
                 className={`inline-block size-2 rounded-full ${
-                  syncStatus === 'live' ? 'bg-accent' : 'bg-mute/50'
+                  syncStatus === 'live' ? 'bg-citrus' : 'bg-mute/50'
                 }`}
                 aria-hidden
               />
@@ -145,8 +145,8 @@ export function WeekView() {
       <section className="mt-3 space-y-4 px-4">
         {todo.length === 0 ? (
           <div className="px-2 py-12 text-center">
-            <div className="mx-auto flex size-20 items-center justify-center rounded-[20px] bg-accent text-white">
-              <IconCart className="size-9" />
+            <div className="mx-auto flex size-24 items-center justify-center rounded-[28px] bg-olive text-citrus">
+              <IconCart className="size-12" />
             </div>
             <p className="mt-4 text-lg font-semibold text-ink">List is empty</p>
             <p className="mt-1 text-sm text-mute">
@@ -156,7 +156,7 @@ export function WeekView() {
               <button
                 type="button"
                 onClick={() => setAddOpen(true)}
-                className="press min-h-12 rounded-[16px] bg-accent text-sm font-semibold text-white"
+                className="press min-h-12 rounded-[16px] bg-citrus text-sm font-semibold text-olive"
               >
                 Add item
               </button>
@@ -172,10 +172,10 @@ export function WeekView() {
         ) : (
           groups.map((g) => (
             <section key={g.cat.id}>
-              <h2 className="sticky top-[4.5rem] z-10 bg-paper/95 px-1 py-1.5 text-xs font-medium text-mute backdrop-blur">
+              <h2 className={`sticky top-[5.75rem] z-10 px-1 py-1.5 text-sm font-semibold text-ink ${categoryWash(g.cat.id)}`}>
                 {g.cat.emoji} {g.cat.label}
               </h2>
-              <div className="overflow-hidden rounded-[20px] bg-card shadow-card [&>div:last-child]:border-b-0">
+              <div className={`overflow-hidden rounded-[24px] [&>div:last-child]:border-b-0 ${categoryWash(g.cat.id)}`}>
                 {g.items.map((s) => (
                   <ShopRow
                     key={s.id}
@@ -207,7 +207,7 @@ export function WeekView() {
                 <button
                   type="button"
                   onClick={clearChecked}
-                  className="press min-h-11 px-2 text-sm font-semibold text-accent"
+                  className="press min-h-11 px-2 text-sm font-semibold text-tomato"
                 >
                   Clear bought
                 </button>
@@ -244,7 +244,7 @@ export function WeekView() {
       <button
         type="button"
         onClick={() => setAddOpen(true)}
-        className="press fixed right-[max(1.25rem,calc((100vw-32rem)/2+1.25rem))] bottom-[calc(5.6rem+env(safe-area-inset-bottom))] z-30 flex size-12 items-center justify-center rounded-full bg-accent text-white shadow-card"
+        className="press fixed right-[max(1.25rem,calc((100vw-32rem)/2+1.25rem))] bottom-[calc(5.6rem+env(safe-area-inset-bottom))] z-30 flex size-14 items-center justify-center rounded-full bg-citrus text-olive shadow-card"
         aria-label="Add item"
       >
         <IconPlus className="size-6" />
@@ -269,7 +269,7 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={`press shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
-        active ? 'bg-accent text-white' : 'bg-card text-mute shadow-card'
+        active ? 'bg-olive text-[#FFF8EF]' : 'bg-card text-mute shadow-card'
       }`}
     >
       {label}

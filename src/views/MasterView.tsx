@@ -63,7 +63,7 @@ export function MasterView() {
       <header className="sticky top-0 z-20 bg-paper/90 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h1 className="text-[1.65rem] leading-tight text-ink">Master</h1>
+            <h1 className="text-[36px] leading-[1.02] tracking-tight text-ink">Master</h1>
             <p className="text-sm text-mute">
               {masterItems.length} saved · never deleted when shopping
             </p>
@@ -71,7 +71,7 @@ export function MasterView() {
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="press flex size-11 items-center justify-center rounded-full bg-accent text-white"
+            className="press flex size-12 items-center justify-center rounded-full bg-citrus text-olive"
             aria-label="New master item"
           >
             <IconPlus className="size-6" />
@@ -90,7 +90,7 @@ export function MasterView() {
             type="button"
             onClick={() => setCategoryFilter('all')}
             className={`press shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
-              categoryFilter === 'all' ? 'bg-accent text-white' : 'bg-card text-mute shadow-card'
+              categoryFilter === 'all' ? 'bg-olive text-[#FFF8EF]' : 'bg-card text-mute shadow-card'
             }`}
           >
             All
@@ -101,7 +101,7 @@ export function MasterView() {
               type="button"
               onClick={() => setCategoryFilter(c.id)}
               className={`press shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
-                categoryFilter === c.id ? 'bg-accent text-white' : 'bg-card text-mute shadow-card'
+                categoryFilter === c.id ? 'bg-olive text-[#FFF8EF]' : 'bg-card text-mute shadow-card'
               }`}
             >
               {c.emoji} {c.label}
@@ -119,7 +119,7 @@ export function MasterView() {
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="press mt-4 min-h-12 rounded-[16px] bg-accent px-4 text-sm font-semibold text-white"
+            className="press mt-4 min-h-12 rounded-[16px] bg-citrus px-4 text-sm font-semibold text-olive"
           >
             Add first item
           </button>

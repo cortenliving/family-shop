@@ -177,7 +177,7 @@ export function SettingsView() {
                     await createFamily(familyName)
                     setBusy(false)
                   }}
-                  className="press min-h-12 rounded-[16px] bg-accent px-4 font-semibold text-white"
+                  className="press min-h-12 rounded-[16px] bg-citrus px-4 font-semibold text-olive"
                 >
                   Create
                 </button>
@@ -242,7 +242,7 @@ export function SettingsView() {
           <button
             type="button"
             onClick={commitName}
-            className="press min-h-12 shrink-0 rounded-[16px] bg-accent px-4 text-sm font-semibold text-white"
+            className="press min-h-12 shrink-0 rounded-[16px] bg-citrus px-4 text-sm font-semibold text-olive"
           >
             Save
           </button>
@@ -322,7 +322,7 @@ export function SettingsView() {
                   type="button"
                   disabled={pushBusy}
                   onClick={() => void enablePush()}
-                  className="press min-h-11 rounded-[16px] bg-accent px-4 text-sm font-semibold text-white"
+                  className="press min-h-11 rounded-[16px] bg-citrus px-4 text-sm font-semibold text-olive"
                 >
                   {pushBusy ? '…' : 'Turn on'}
                 </button>
@@ -443,8 +443,9 @@ function FamilyCodeCard({
   }, [code])
 
   return (
-    <div className="mx-4 mt-3 rounded-[20px] bg-paper px-4 py-5 text-center">
-      <p className="font-mono text-3xl font-semibold tracking-[0.28em] text-ink">{code}</p>
+    <div className="mx-4 mt-3 rounded-[24px] bg-olive px-4 py-6 text-center text-[#FFF8EF]">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-citrus">Family code</p>
+      <p className="mt-2 font-mono text-[28px] font-semibold tracking-[0.28em]">{code}</p>
       {src ? (
         <img
           src={src}
@@ -463,7 +464,7 @@ function FamilyCodeCard({
         <button
           type="button"
           onClick={onShare}
-          className="press min-h-12 rounded-[16px] bg-accent text-sm font-semibold text-white"
+          className="press min-h-12 rounded-[16px] bg-citrus text-sm font-semibold text-olive"
         >
           Share
         </button>

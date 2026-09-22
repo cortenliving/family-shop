@@ -10,7 +10,7 @@ export function useTheme() {
       root.classList.toggle('dark', dark)
       root.style.colorScheme = dark ? 'dark' : 'light'
       const meta = document.querySelector('meta[name="theme-color"]')
-      if (meta) meta.setAttribute('content', dark ? '#0C0A09' : '#F3F1EC')
+      if (meta) meta.setAttribute('content', dark ? '#101610' : '#FFF8EF')
     }
 
     if (theme === 'system') {

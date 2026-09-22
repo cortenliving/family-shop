@@ -21,7 +21,7 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-40 px-2"
       style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
     >
-      <div className="mx-auto flex max-w-lg items-stretch justify-around rounded-[20px] bg-card/90 px-1 pt-1 shadow-card backdrop-blur-xl">
+      <div className="mx-auto flex max-w-lg items-stretch justify-around rounded-full bg-olive px-2 py-1 shadow-card">
         {tabs.map((t) => {
           const active = tab === t.id
           return (
@@ -29,21 +29,19 @@ export function BottomNav() {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`press relative flex min-h-11 min-w-16 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1.5 text-[11px] font-medium ${
-                active ? 'text-accent' : 'text-mute'
-              }`}
+              className="press relative flex min-h-11 min-w-16 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-[11px] font-medium text-[#FFF8EF]"
             >
               <span className="relative">
                 <t.Icon className="size-6" filled={active} />
                 {t.id === 'week' && weekCount > 0 ? (
-                  <span className="absolute -right-2 -top-1 flex size-4 items-center justify-center rounded-full bg-accent text-[9px] font-semibold leading-none text-white">
+                  <span className="absolute -right-2 -top-1 flex size-4 items-center justify-center rounded-full bg-citrus text-[9px] font-semibold leading-none text-olive">
                     {weekCount > 9 ? '9+' : weekCount}
                   </span>
                 ) : null}
               </span>
-              <span>{t.label}</span>
+              <span className={active ? 'text-citrus' : 'text-[#FFF8EF]/80'}>{t.label}</span>
               {active ? (
-                <span className="absolute bottom-1 h-0.5 w-3 rounded-full bg-accent" />
+                <span className="absolute bottom-1 size-1.5 rounded-full bg-citrus" />
               ) : null}
             </button>
           )

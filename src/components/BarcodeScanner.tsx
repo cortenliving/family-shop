@@ -419,7 +419,7 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <div className="relative w-[90%] max-w-sm">
             <div
-              className="h-36 w-full rounded-[20px] border-[3px] border-[#2DD4BF]"
+              className="h-36 w-full rounded-[20px] border-[3px] border-[#F4B942]"
               style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)' }}
             />
             {scanning && !handled.current ? (
@@ -456,7 +456,7 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
             onChange={(e) => setManual(e.target.value)}
             inputMode="numeric"
             placeholder="Or type barcode numbers"
-            className="min-h-12 flex-1 rounded-2xl border border-slate-700 bg-slate-900 px-4 text-base text-white outline-none ring-teal-500 focus:ring-2"
+            className="min-h-12 flex-1 rounded-2xl border border-slate-700 bg-slate-900 px-4 text-base text-white outline-none ring-[#F4B942] focus:ring-2"
           />
           <button
             type="submit"
