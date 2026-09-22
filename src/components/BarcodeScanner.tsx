@@ -419,7 +419,7 @@ export function BarcodeScanner({ onResult, onClose }: Props) {
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <div className="relative w-[90%] max-w-sm">
             <div
-              className="h-36 w-full rounded-2xl border-[3px] border-teal-400"
+              className="h-36 w-full rounded-[20px] border-[3px] border-[#2DD4BF]"
               style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)' }}
             />
             {scanning && !handled.current ? (

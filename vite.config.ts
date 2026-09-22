@@ -14,8 +14,8 @@ export default defineConfig({
         name: 'Family Shop',
         short_name: 'FamilyShop',
         description: 'Shared family shopping list with a permanent master library',
-        theme_color: '#0f766e',
-        background_color: '#0f172a',
+        theme_color: '#0F766E',
+        background_color: '#F3F1EC',
         display: 'standalone',
         orientation: 'portrait-primary',
         scope: '/',
@@ -41,7 +41,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        cacheId: 'family-shop-v3',
+        cacheId: 'family-shop-v4',
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
@@ -53,7 +53,7 @@ export default defineConfig({
             urlPattern: ({ request }) => request.mode === 'navigate',
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'family-shop-html-v3',
+              cacheName: 'family-shop-html-v4',
               networkTimeoutSeconds: 3,
               expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },

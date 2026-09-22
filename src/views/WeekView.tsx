@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AddItemSheet } from '../components/AddItemSheet'
+import { IconCart, IconPlus } from '../components/icons'
 import { ShopRow, categoryMeta } from '../components/ItemRow'
 import { SharingBanner } from '../components/SharingStatus'
 import {
@@ -22,7 +23,9 @@ export function WeekView() {
   const addToWeek = useShopStore((s) => s.addToWeek)
   const addUsualShop = useShopStore((s) => s.addUsualShop)
   const setTab = useShopStore((s) => s.setTab)
+  const syncStatus = useShopStore((s) => s.syncStatus)
   const [addOpen, setAddOpen] = useState(false)
+  const [boughtOpen, setBoughtOpen] = useState(false)
 
   const masterById = useMemo(() => {
     const map = new Map(masterItems.map((m) => [m.id, m]))
@@ -59,34 +62,31 @@ export function WeekView() {
     }
   }, [shoppingItems, categoryFilter, masterById])
 
-  if (!family) {
-    return (
-      <EmptyFamily onGoSettings={() => setTab('settings')} />
-    )
-  }
+  if (!family) return null
+
+  const groups = CATEGORIES.map((cat) => ({
+    cat,
+    items: todo.filter(
+      (s) => (masterById.get(s.masterItemId)?.category ?? 'other') === cat.id,
+    ),
+  })).filter((g) => g.items.length > 0)
 
   return (
     <div className="pb-4">
-      <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/90 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
-              This week’s list
-            </p>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              {family.name}
-            </h1>
-            <p className="text-sm text-slate-500">
-              {todo.length} to get · {bought.length} bought
+      <header className="sticky top-0 z-20 bg-paper/90 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-[1.65rem] leading-tight text-ink">{family.name}</h1>
+            <p className="mt-0.5 flex items-center gap-2 text-sm text-mute">
+              <span
+                className={`inline-block size-2 rounded-full ${
+                  syncStatus === 'live' ? 'bg-accent' : 'bg-mute/50'
+                }`}
+                aria-hidden
+              />
+              {todo.length} to get
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="min-h-12 rounded-2xl bg-teal-600 px-4 text-sm font-bold text-white shadow-sm active:scale-[0.98]"
-          >
-            + Add
-          </button>
         </div>
 
         <SharingBanner compact />
@@ -95,9 +95,11 @@ export function WeekView() {
           <button
             type="button"
             onClick={() => addUsualShop()}
-            className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-100 text-sm font-bold text-amber-950 ring-1 ring-amber-300 active:scale-[0.99] dark:bg-amber-950/50 dark:text-amber-50 dark:ring-amber-800"
+            className="press mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-[16px] bg-card text-sm font-semibold text-ink shadow-card"
           >
-            <span aria-hidden>★</span>
+            <span className="text-amber-500" aria-hidden>
+              ★
+            </span>
             {`Usual shop · add ${usualMissing} regular item${usualMissing === 1 ? '' : 's'}`}
           </button>
         ) : null}
@@ -121,7 +123,7 @@ export function WeekView() {
 
       {suggestions.length > 0 ? (
         <section className="px-4 pt-4">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-mute">
             Quick add
           </h2>
           <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -130,7 +132,7 @@ export function WeekView() {
                 key={m.id}
                 type="button"
                 onClick={() => addToWeek(m.id)}
-                className="shrink-0 rounded-full bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-800"
+                className="press shrink-0 rounded-full bg-card px-3 py-2 text-sm font-medium text-ink shadow-card"
               >
                 {categoryMeta(m.category).emoji} {m.name}
                 {m.frequent ? <span className="ml-1 text-amber-500">★</span> : null}
@@ -140,68 +142,86 @@ export function WeekView() {
         </section>
       ) : null}
 
-      <section className="mt-2">
+      <section className="mt-3 space-y-4 px-4">
         {todo.length === 0 ? (
-          <div className="px-6 py-12 text-center">
-            <p className="text-4xl">🛒</p>
-            <p className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">
-              List is empty
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
+          <div className="px-2 py-12 text-center">
+            <div className="mx-auto flex size-20 items-center justify-center rounded-[20px] bg-accent text-white">
+              <IconCart className="size-9" />
+            </div>
+            <p className="mt-4 text-lg font-semibold text-ink">List is empty</p>
+            <p className="mt-1 text-sm text-mute">
               Add items or pick from your Master List — nothing is lost when you check things off.
             </p>
-            <div className="mt-4 flex justify-center gap-2">
+            <div className="mt-5 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setAddOpen(true)}
-                className="rounded-2xl bg-teal-600 px-4 py-3 text-sm font-bold text-white"
+                className="press min-h-12 rounded-[16px] bg-accent text-sm font-semibold text-white"
               >
                 Add item
               </button>
               <button
                 type="button"
                 onClick={() => setTab('master')}
-                className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-bold dark:bg-slate-800"
+                className="press min-h-12 rounded-[16px] bg-card text-sm font-semibold text-ink shadow-card"
               >
                 Master List
               </button>
             </div>
           </div>
         ) : (
-          todo.map((s) => (
-            <ShopRow
-              key={s.id}
-              shopping={s}
-              master={masterById.get(s.masterItemId)}
-              onToggle={() => toggleChecked(s.id)}
-              onRemove={() => removeFromWeek(s.id)}
-            />
+          groups.map((g) => (
+            <section key={g.cat.id}>
+              <h2 className="sticky top-[4.5rem] z-10 bg-paper/95 px-1 py-1.5 text-xs font-medium text-mute backdrop-blur">
+                {g.cat.emoji} {g.cat.label}
+              </h2>
+              <div className="overflow-hidden rounded-[20px] bg-card shadow-card [&>div:last-child]:border-b-0">
+                {g.items.map((s) => (
+                  <ShopRow
+                    key={s.id}
+                    shopping={s}
+                    master={masterById.get(s.masterItemId)}
+                    onToggle={() => toggleChecked(s.id)}
+                    onRemove={() => removeFromWeek(s.id)}
+                  />
+                ))}
+              </div>
+            </section>
           ))
         )}
       </section>
 
       {bought.length > 0 ? (
-        <section className="mt-4">
-          <div className="flex items-center justify-between px-4 pb-1">
-            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Bought
-            </h2>
-            <button
-              type="button"
-              onClick={clearChecked}
-              className="text-sm font-semibold text-teal-700 dark:text-teal-300"
-            >
-              Clear bought
-            </button>
-          </div>
-          {bought.map((s) => (
-            <ShopRow
-              key={s.id}
-              shopping={s}
-              master={masterById.get(s.masterItemId)}
-              onToggle={() => toggleChecked(s.id)}
-            />
-          ))}
+        <section className="mx-4 mt-4 overflow-hidden rounded-[20px] bg-card shadow-card">
+          <button
+            type="button"
+            onClick={() => setBoughtOpen((open) => !open)}
+            className="flex min-h-12 w-full items-center justify-between px-4 text-sm font-medium text-mute"
+          >
+            <span>Bought · {bought.length}</span>
+            <span>{boughtOpen ? 'Hide' : 'Show'}</span>
+          </button>
+          {boughtOpen ? (
+            <div className="border-t border-ink/8">
+              <div className="flex justify-end px-3 pt-1">
+                <button
+                  type="button"
+                  onClick={clearChecked}
+                  className="press min-h-11 px-2 text-sm font-semibold text-accent"
+                >
+                  Clear bought
+                </button>
+              </div>
+              {bought.map((s) => (
+                <ShopRow
+                  key={s.id}
+                  shopping={s}
+                  master={masterById.get(s.masterItemId)}
+                  onToggle={() => toggleChecked(s.id)}
+                />
+              ))}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -214,12 +234,21 @@ export function WeekView() {
                 clearCurrentList()
               }
             }}
-            className="min-h-12 w-full rounded-2xl border border-slate-200 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
+            className="press min-h-12 w-full rounded-[16px] text-sm font-medium text-mute"
           >
             Clear this week’s list
           </button>
         </div>
       ) : null}
+
+      <button
+        type="button"
+        onClick={() => setAddOpen(true)}
+        className="press fixed right-[max(1.25rem,calc((100vw-32rem)/2+1.25rem))] bottom-[calc(5.6rem+env(safe-area-inset-bottom))] z-30 flex size-12 items-center justify-center rounded-full bg-accent text-white shadow-card"
+        aria-label="Add item"
+      >
+        <IconPlus className="size-6" />
+      </button>
 
       <AddItemSheet open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
@@ -239,10 +268,8 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-        active
-          ? 'bg-teal-600 text-white'
-          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+      className={`press shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
+        active ? 'bg-accent text-white' : 'bg-card text-mute shadow-card'
       }`}
     >
       {label}
@@ -250,24 +277,5 @@ function FilterChip({
   )
 }
 
-function EmptyFamily({ onGoSettings }: { onGoSettings: () => void }) {
-  return (
-    <div className="flex min-h-[70dvh] flex-col items-center justify-center px-6 text-center">
-      <p className="text-5xl">👨‍👩‍👧‍👦</p>
-      <h1 className="mt-4 text-2xl font-bold text-slate-900 dark:text-white">
-        Family Shop
-      </h1>
-      <p className="mt-2 max-w-sm text-slate-500">
-        Create a family or join with a code to start a shared list. Master items never disappear when you check them off.
-      </p>
-      <button
-        type="button"
-        onClick={onGoSettings}
-        className="mt-6 min-h-14 rounded-2xl bg-teal-600 px-6 text-base font-bold text-white"
-      >
-        Get started
-      </button>
-    </div>
-  )
-}
+
 

@@ -5,10 +5,10 @@ export function Toast() {
   if (!toast) return null
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(8.25rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4"
       role="status"
     >
-      <div className="rounded-2xl bg-slate-900/95 px-4 py-2.5 text-sm font-medium text-white shadow-lg dark:bg-white/95 dark:text-slate-900">
+      <div className="rounded-[16px] bg-ink px-4 py-2 text-[14px] font-medium text-card shadow-card">
         {toast}
       </div>
     </div>

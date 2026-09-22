@@ -39,15 +39,11 @@ export function SharingBanner({ compact }: { compact?: boolean }) {
       <button
         type="button"
         onClick={() => setTab('settings')}
-        className={`mt-2 flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-xs font-semibold ${
-          live
-            ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-200'
-            : 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100'
-        }`}
+        className="mt-2 flex w-full items-center gap-2 py-1 text-left text-xs font-medium text-mute"
       >
         <span
           className={`inline-block size-2 shrink-0 rounded-full ${
-            live ? 'bg-emerald-500' : 'bg-amber-500'
+            live ? 'bg-accent' : 'bg-amber-500'
           }`}
           aria-hidden
         />
@@ -84,7 +80,7 @@ export function SharingStatusCard() {
   })
 
   return (
-    <div className="rounded-2xl border border-teal-200 bg-teal-50/80 p-3 dark:border-teal-900 dark:bg-teal-950/40">
+    <div className="px-4 py-3">
       <div className="flex items-start gap-3">
         <span
           className={`mt-1 inline-block size-3 shrink-0 rounded-full ${
@@ -93,12 +89,12 @@ export function SharingStatusCard() {
           aria-hidden
         />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-teal-950 dark:text-teal-50">
+          <p className="text-sm font-semibold text-ink">
             {count <= 1
               ? 'Shared list · waiting for family'
               : `You’re sharing with ${count} people`}
           </p>
-          <p className="mt-0.5 text-xs text-teal-800/80 dark:text-teal-200/80">
+          <p className="mt-0.5 text-xs text-mute">
             {live
               ? 'Live sync is on — when anyone adds or checks items, everyone sees it.'
               : hasRemoteApi()
@@ -108,11 +104,11 @@ export function SharingStatusCard() {
                 : 'This device is local-only (no cloud API).'}
           </p>
           {count <= 1 ? (
-            <p className="mt-2 text-xs font-medium text-teal-900 dark:text-teal-100">
+            <p className="mt-2 text-xs font-medium text-ink">
               Share the join code below so others use the same list.
             </p>
           ) : (
-            <p className="mt-2 text-xs text-teal-800/80 dark:text-teal-200/70">
+            <p className="mt-2 text-xs text-mute">
               {others.filter((m) => m.active).length > 0
                 ? `${others.filter((m) => m.active).length} other${others.filter((m) => m.active).length === 1 ? '' : 's'} active recently`
                 : 'Others are on this list (may be offline)'}
@@ -124,7 +120,7 @@ export function SharingStatusCard() {
       </div>
 
       {sorted.length > 0 ? (
-        <ul className="mt-3 space-y-1.5 border-t border-teal-200/70 pt-3 dark:border-teal-800/60">
+        <ul className="mt-3 space-y-1.5 border-t border-ink/8 pt-3">
           {sorted.map((m) => {
             const isYou = m.id === member?.id
             return (
@@ -138,7 +134,7 @@ export function SharingStatusCard() {
                       m.active || isYou ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
                   />
-                  <span className="truncate font-medium text-slate-900 dark:text-white">
+                  <span className="truncate font-medium text-ink">
                     {m.displayName}
                     {isYou ? (
                       <span className="ml-1 text-xs font-normal text-slate-500">(you)</span>
@@ -162,7 +158,7 @@ export function SharingStatusCard() {
                           void removeFamilyMember(m.id)
                         }
                       }}
-                      className="rounded-lg px-2 py-1 text-[11px] font-bold text-red-600 active:bg-red-50 dark:text-red-400 dark:active:bg-red-950/40"
+                      className="press min-h-11 rounded-[16px] px-2 text-[11px] font-semibold text-danger"
                       aria-label={`Remove ${m.displayName}`}
                     >
                       Remove
@@ -174,13 +170,13 @@ export function SharingStatusCard() {
           })}
         </ul>
       ) : (
-        <p className="mt-3 border-t border-teal-200/70 pt-3 text-xs text-teal-900/70 dark:border-teal-800/60 dark:text-teal-200/70">
+        <p className="mt-3 border-t border-ink/8 pt-3 text-xs text-mute">
           You appear here after the first cloud sync.
         </p>
       )}
 
       {sorted.length > 1 ? (
-        <p className="mt-2 text-[11px] leading-snug text-teal-900/70 dark:text-teal-200/70">
+        <p className="mt-2 text-[11px] leading-snug text-mute">
           Two accounts for the same person? Remove the extra one here. Each phone
           keeps its own name under Settings → You.
         </p>
@@ -193,7 +189,7 @@ export function SharingStatusCard() {
             void pullRemote()
             void refreshMembers()
           }}
-          className="mt-3 w-full rounded-xl bg-white/80 py-2 text-xs font-bold text-teal-800 dark:bg-teal-900/50 dark:text-teal-100"
+          className="press mt-3 min-h-11 w-full rounded-[16px] bg-paper text-xs font-semibold text-ink"
         >
           Refresh who is on this list
         </button>

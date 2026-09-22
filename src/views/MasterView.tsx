@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AddItemSheet } from '../components/AddItemSheet'
+import { IconPlus } from '../components/icons'
 import { MasterRow } from '../components/ItemRow'
 import { useShopStore } from '../store/useShopStore'
 import { CATEGORIES } from '../types'
@@ -45,11 +46,11 @@ export function MasterView() {
   if (!family) {
     return (
       <div className="px-6 py-20 text-center">
-        <p className="text-slate-500">Create or join a family first.</p>
+        <p className="text-mute">Create or join a family first.</p>
         <button
           type="button"
           onClick={() => setTab('settings')}
-          className="mt-4 font-semibold text-teal-700"
+          className="mt-4 font-semibold text-accent"
         >
           Open settings
         </button>
@@ -59,25 +60,21 @@ export function MasterView() {
 
   return (
     <div>
-      <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/90 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90">
-        <div className="flex items-start justify-between gap-3">
+      <header className="sticky top-0 z-20 bg-paper/90 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl">
+        <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-300">
-              Master library
-            </p>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              All items
-            </h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-[1.65rem] leading-tight text-ink">Master</h1>
+            <p className="text-sm text-mute">
               {masterItems.length} saved · never deleted when shopping
             </p>
           </div>
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="min-h-12 rounded-2xl bg-violet-600 px-4 text-sm font-bold text-white active:scale-[0.98]"
+            className="press flex size-11 items-center justify-center rounded-full bg-accent text-white"
+            aria-label="New master item"
           >
-            + New
+            <IconPlus className="size-6" />
           </button>
         </div>
 
@@ -85,17 +82,15 @@ export function MasterView() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search master list…"
-          className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none ring-violet-500 focus:ring-2 dark:border-slate-700 dark:bg-slate-900"
+          className="mt-3 w-full rounded-full bg-card px-4 py-3 text-base text-ink shadow-card outline-none ring-accent focus:ring-2"
         />
 
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none]">
           <button
             type="button"
             onClick={() => setCategoryFilter('all')}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-              categoryFilter === 'all'
-                ? 'bg-violet-600 text-white'
-                : 'bg-slate-100 dark:bg-slate-800'
+            className={`press shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
+              categoryFilter === 'all' ? 'bg-accent text-white' : 'bg-card text-mute shadow-card'
             }`}
           >
             All
@@ -105,10 +100,8 @@ export function MasterView() {
               key={c.id}
               type="button"
               onClick={() => setCategoryFilter(c.id)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                categoryFilter === c.id
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800'
+              className={`press shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
+                categoryFilter === c.id ? 'bg-accent text-white' : 'bg-card text-mute shadow-card'
               }`}
             >
               {c.emoji} {c.label}
@@ -119,29 +112,30 @@ export function MasterView() {
 
       {filtered.length === 0 ? (
         <div className="px-6 py-16 text-center">
-          <p className="text-4xl">📚</p>
-          <p className="mt-3 font-semibold">No master items yet</p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="text-lg font-semibold text-ink">No master items yet</p>
+          <p className="mt-1 text-sm text-mute">
             Add items once — re-add them to any week’s list in one tap.
           </p>
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="mt-4 rounded-2xl bg-violet-600 px-4 py-3 text-sm font-bold text-white"
+            className="press mt-4 min-h-12 rounded-[16px] bg-accent px-4 text-sm font-semibold text-white"
           >
             Add first item
           </button>
         </div>
       ) : (
-        filtered.map((m) => (
-          <MasterRow
-            key={m.id}
-            item={m}
-            inWeek={onWeek.has(m.id)}
-            onAddToWeek={() => addToWeek(m.id)}
-            onToggleFrequent={() => toggleFrequent(m.id)}
-          />
-        ))
+        <div className="mx-4 mt-3 overflow-hidden rounded-[20px] bg-card shadow-card [&>div:last-child]:border-b-0">
+          {filtered.map((m) => (
+            <MasterRow
+              key={m.id}
+              item={m}
+              inWeek={onWeek.has(m.id)}
+              onAddToWeek={() => addToWeek(m.id)}
+              onToggleFrequent={() => toggleFrequent(m.id)}
+            />
+          ))}
+        </div>
       )}
 
       <AddItemSheet

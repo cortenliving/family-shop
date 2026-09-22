@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toDataURL } from 'qrcode'
 import { SharingStatusCard } from '../components/SharingStatus'
 import {
   disablePushNotifications,
@@ -67,6 +68,16 @@ export function SettingsView() {
     saveMemberName(next)
   }
 
+  const copyCode = async () => {
+    if (!family) return
+    try {
+      await navigator.clipboard.writeText(family.code)
+      showToast('Code copied')
+    } catch {
+      showToast(family.code)
+    }
+  }
+
   const shareInvite = async () => {
     if (!family) return
     const url = new URL(window.location.href)
@@ -118,30 +129,17 @@ export function SettingsView() {
   }
 
   return (
-    <div className="px-4 pb-8 pt-[max(0.75rem,env(safe-area-inset-top))]">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Settings</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Family sharing, theme, and notifications
-      </p>
+    <div className="pb-8 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <h1 className="px-5 text-[1.65rem] text-ink">Settings</h1>
+      <p className="mt-1 px-5 text-sm text-mute">Family, appearance, and this phone</p>
 
-      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-          Family
-        </h2>
-
+      <p className="mt-6 px-5 text-[13px] font-medium text-mute">Family</p>
+      <section className="mx-4 mt-2 overflow-hidden rounded-[20px] bg-card shadow-card">
         {family ? (
-          <div className="mt-3 space-y-3">
-            <div>
-              <p className="text-lg font-bold text-slate-900 dark:text-white">
-                {family.name}
-              </p>
-              <p className="text-sm text-slate-500">
-                Join code{' '}
-                <span className="font-mono text-base font-bold tracking-widest text-teal-700 dark:text-teal-300">
-                  {family.code}
-                </span>
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
+          <div>
+            <div className="px-4 pt-4">
+              <p className="text-lg font-semibold text-ink">{family.name}</p>
+              <p className="mt-1 text-xs text-mute">
                 Status:{' '}
                 {syncStatus === 'live'
                   ? 'live (synced)'
@@ -155,51 +153,8 @@ export function SettingsView() {
                 {hasRemoteApi() ? ' · cloud API on' : ' · this device only'}
               </p>
             </div>
-
+            <FamilyCodeCard code={family.code} onCopy={() => void copyCode()} onShare={() => void shareInvite()} />
             <SharingStatusCard />
-
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => void shareInvite()}
-                className="min-h-12 rounded-2xl bg-teal-600 font-bold text-white"
-              >
-                Invite family (share link / code)
-              </button>
-              {hasRemoteApi() ? (
-                <button
-                  type="button"
-                  onClick={() => void pullRemote()}
-                  className="min-h-12 rounded-2xl bg-slate-100 font-semibold dark:bg-slate-800"
-                >
-                  Pull latest list from cloud
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    confirm(
-                      'Reset this phone’s copy and load the family list from the server?',
-                    )
-                  ) {
-                    void resetDeviceList()
-                  }
-                }}
-                className="min-h-12 rounded-2xl bg-amber-50 font-semibold text-amber-950 dark:bg-amber-950/40 dark:text-amber-50"
-              >
-                Reset this device list
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm('Leave this family on this device?')) void leaveFamily()
-                }}
-                className="min-h-12 rounded-2xl text-sm font-semibold text-red-600"
-              >
-                Leave family
-              </button>
-            </div>
           </div>
         ) : (
           <div className="mt-3 space-y-4">
@@ -211,7 +166,7 @@ export function SettingsView() {
                 <input
                   value={familyName}
                   onChange={(e) => setFamilyName(e.target.value)}
-                  className="min-h-12 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-800"
+                  className="min-h-12 flex-1 rounded-[16px] bg-paper px-3 text-ink"
                   placeholder="Family name"
                 />
                 <button
@@ -222,7 +177,7 @@ export function SettingsView() {
                     await createFamily(familyName)
                     setBusy(false)
                   }}
-                  className="min-h-12 rounded-2xl bg-teal-600 px-4 font-bold text-white"
+                  className="press min-h-12 rounded-[16px] bg-accent px-4 font-semibold text-white"
                 >
                   Create
                 </button>
@@ -236,7 +191,7 @@ export function SettingsView() {
                 <input
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  className="min-h-12 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 font-mono tracking-widest dark:border-slate-700 dark:bg-slate-800"
+                  className="min-h-12 flex-1 rounded-[16px] bg-paper px-3 font-mono tracking-widest text-ink"
                   placeholder="ABC123"
                   maxLength={8}
                 />
@@ -248,7 +203,7 @@ export function SettingsView() {
                     await joinFamily(joinCode)
                     setBusy(false)
                   }}
-                  className="min-h-12 rounded-2xl bg-slate-900 px-4 font-bold text-white dark:bg-slate-100 dark:text-slate-900"
+                  className="press min-h-12 rounded-[16px] bg-ink px-4 font-semibold text-card"
                 >
                   Join
                 </button>
@@ -258,11 +213,9 @@ export function SettingsView() {
         )}
       </section>
 
-      <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-          You
-        </h2>
-        <label className="mt-3 block text-xs font-semibold text-slate-500">
+      <p className="mt-6 px-5 text-[13px] font-medium text-mute">You</p>
+      <section className="mx-4 mt-2 overflow-hidden rounded-[20px] bg-card p-4 shadow-card">
+        <label className="block text-xs font-medium text-mute">
           Display name
         </label>
         <div className="mt-1 flex gap-2">
@@ -281,7 +234,7 @@ export function SettingsView() {
                 e.currentTarget.blur()
               }
             }}
-            className="min-h-12 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-800"
+            className="min-h-12 flex-1 rounded-[16px] bg-paper px-3 text-ink"
             placeholder="e.g. Kane, Mum, Dad"
             autoComplete="name"
             enterKeyHint="done"
@@ -289,12 +242,12 @@ export function SettingsView() {
           <button
             type="button"
             onClick={commitName}
-            className="min-h-12 shrink-0 rounded-2xl bg-teal-600 px-4 text-sm font-bold text-white"
+            className="press min-h-12 shrink-0 rounded-[16px] bg-accent px-4 text-sm font-semibold text-white"
           >
             Save
           </button>
         </div>
-        <p className="mt-1.5 text-xs text-slate-500">
+        <p className="mt-1.5 text-xs text-mute">
           This is how you show up on the shared family list
           {familyMembers.length > 1
             ? ` (${familyMembers.length} people on this list).`
@@ -303,20 +256,16 @@ export function SettingsView() {
         </p>
       </section>
 
-      <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-          Appearance
-        </h2>
-        <div className="mt-3 grid grid-cols-3 gap-2">
+      <p className="mt-6 px-5 text-[13px] font-medium text-mute">Appearance</p>
+      <section className="mx-4 mt-2 rounded-[20px] bg-card p-2 shadow-card">
+        <div className="grid grid-cols-3 rounded-full bg-paper p-1">
           {(['system', 'light', 'dark'] as const).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setTheme(t)}
-              className={`min-h-12 rounded-2xl text-sm font-semibold capitalize ${
-                theme === t
-                  ? 'bg-teal-600 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800'
+              className={`press min-h-11 rounded-full text-sm font-semibold capitalize ${
+                theme === t ? 'bg-card text-ink shadow-card' : 'text-mute'
               }`}
             >
               {t}
@@ -325,11 +274,10 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-          Notifications
-        </h2>
-        <p className="mt-2 text-sm text-slate-500">
+      <p className="mt-6 px-5 text-[13px] font-medium text-mute">Device</p>
+      <section className="mx-4 mt-2 overflow-hidden rounded-[20px] bg-card p-4 shadow-card">
+        <h2 className="text-sm font-semibold text-ink">Notifications</h2>
+        <p className="mt-2 text-sm text-mute">
           Get a ping when someone adds items, checks things off, or starts the
           usual shop. <strong>Every person</strong> needs to turn this on on
           their own phone. On iPhone you must use the{' '}
@@ -337,26 +285,26 @@ export function SettingsView() {
         </p>
 
         {!family ? (
-          <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+          <p className="mt-3 text-sm text-danger">
             Join a family first to enable shared push.
           </p>
         ) : !pushSupported() ? (
-          <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+          <p className="mt-3 text-sm text-danger">
             This browser doesn’t support Web Push. On iPhone: Share → Add to Home
             Screen, then open Family Shop from the icon.
           </p>
         ) : !vapidConfigured() || !hasRemoteApi() ? (
-          <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+          <p className="mt-3 text-sm text-danger">
             Cloud push isn’t configured for this build.
           </p>
         ) : (
           <div className="mt-3 space-y-2">
-            <div className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-3 dark:bg-slate-800/60">
+            <div className="flex items-center justify-between gap-2 rounded-[16px] bg-paper px-3 py-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                <p className="text-sm font-semibold text-ink">
                   Family list alerts
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-mute">
                   {pushOn ? 'On for this device' : 'Off on this device'}
                 </p>
               </div>
@@ -365,7 +313,7 @@ export function SettingsView() {
                   type="button"
                   disabled={pushBusy}
                   onClick={() => void disablePush()}
-                  className="min-h-11 rounded-xl bg-slate-200 px-4 text-sm font-bold dark:bg-slate-700"
+                  className="press min-h-11 rounded-[16px] bg-card px-4 text-sm font-semibold text-ink shadow-card"
                 >
                   Turn off
                 </button>
@@ -374,14 +322,14 @@ export function SettingsView() {
                   type="button"
                   disabled={pushBusy}
                   onClick={() => void enablePush()}
-                  className="min-h-11 rounded-xl bg-teal-600 px-4 text-sm font-bold text-white"
+                  className="press min-h-11 rounded-[16px] bg-accent px-4 text-sm font-semibold text-white"
                 >
                   {pushBusy ? '…' : 'Turn on'}
                 </button>
               )}
             </div>
             {pushHint ? (
-              <p className="text-xs text-slate-500">{pushHint}</p>
+              <p className="text-xs text-mute">{pushHint}</p>
             ) : null}
           </div>
         )}
@@ -390,20 +338,42 @@ export function SettingsView() {
           <span className="text-sm font-medium">Weekly “make the list” reminder</span>
           <input
             type="checkbox"
-            className="size-5 accent-teal-600"
+            className="size-5 accent-accent"
             checked={weeklyReminder}
             onChange={(e) => setWeeklyReminder(e.target.checked)}
           />
         </label>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-mute">
           Preference saved on this device (local). Full scheduled push coming later.
         </p>
-      </section>
-
-      <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-          About
-        </h2>
+        {hasRemoteApi() && family ? (
+          <button
+            type="button"
+            onClick={() => void pullRemote()}
+            className="press mt-4 min-h-12 w-full rounded-[16px] bg-paper text-sm font-semibold text-ink"
+          >
+            Pull latest list from cloud
+          </button>
+        ) : null}
+        {family ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                confirm(
+                  'Reset this phone’s copy and load the family list from the server?',
+                )
+              ) {
+                void resetDeviceList()
+              }
+            }}
+            className="press mt-2 min-h-12 w-full rounded-[16px] bg-paper text-sm font-semibold text-ink"
+          >
+            Reset this device list
+          </button>
+        ) : null}
+        <div className="mt-4 border-t border-ink/8 pt-4 text-sm text-mute">
+        <h2 className="text-sm font-semibold text-ink">About</h2>
         <p className="mt-2">
           Family Shop keeps a permanent Master List. Checking items off only
           clears them from this week’s list so next shop is one tap away.
@@ -411,7 +381,7 @@ export function SettingsView() {
         <p className="mt-2">
           Barcode lookup uses{' '}
           <a
-            className="font-semibold text-teal-700 dark:text-teal-300"
+            className="font-semibold text-accent"
             href="https://world.openfoodfacts.org"
             target="_blank"
             rel="noreferrer"
@@ -423,7 +393,81 @@ export function SettingsView() {
         <p className="mt-2 text-xs">
           Install on iPhone: Share → Add to Home Screen.
         </p>
+        </div>
       </section>
+
+      {family ? (
+        <>
+          <p className="mt-6 px-5 text-[13px] font-medium text-danger">Danger</p>
+          <section className="mx-4 mt-2 overflow-hidden rounded-[20px] bg-card shadow-card">
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Leave this family on this device?')) void leaveFamily()
+              }}
+              className="press min-h-12 w-full px-4 text-left text-sm font-semibold text-danger"
+            >
+              Leave family
+            </button>
+          </section>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function FamilyCodeCard({
+  code,
+  onCopy,
+  onShare,
+}: {
+  code: string
+  onCopy: () => void
+  onShare: () => void
+}) {
+  const [src, setSrc] = useState('')
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('join', code)
+    let cancelled = false
+    void toDataURL(url.toString(), { margin: 1, width: 280, errorCorrectionLevel: 'M' })
+      .then((dataUrl) => {
+        if (!cancelled) setSrc(dataUrl)
+      })
+      .catch(() => {
+        if (!cancelled) setSrc('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [code])
+
+  return (
+    <div className="mx-4 mt-3 rounded-[20px] bg-paper px-4 py-5 text-center">
+      <p className="font-mono text-3xl font-semibold tracking-[0.28em] text-ink">{code}</p>
+      {src ? (
+        <img
+          src={src}
+          alt={`QR code to join with ${code}`}
+          className="mx-auto mt-4 size-40 rounded-[16px] bg-white p-2"
+        />
+      ) : null}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onCopy}
+          className="press min-h-12 rounded-[16px] bg-card text-sm font-semibold text-ink shadow-card"
+        >
+          Copy
+        </button>
+        <button
+          type="button"
+          onClick={onShare}
+          className="press min-h-12 rounded-[16px] bg-accent text-sm font-semibold text-white"
+        >
+          Share
+        </button>
+      </div>
     </div>
   )
 }

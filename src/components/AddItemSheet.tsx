@@ -150,17 +150,16 @@ export function AddItemSheet({
         onClick={onClose}
       />
       <div
-        className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-4 shadow-2xl dark:bg-slate-900 sm:rounded-3xl sm:p-5"
+        className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-[24px] bg-card px-4 pt-3 shadow-card sm:rounded-[24px] sm:p-5"
         style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
       >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-ink/15" />
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            Add item
-          </h2>
+          <h2 className="text-lg font-semibold text-ink">Add item</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="press min-h-11 rounded-full px-3 text-sm font-medium text-mute"
           >
             Close
           </button>
@@ -171,11 +170,11 @@ export function AddItemSheet({
             type="button"
             disabled={scanning}
             onClick={() => setScannerOpen(true)}
-            className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-teal-600 px-3 text-sm font-semibold text-white active:scale-[0.98]"
+            className="press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-[16px] bg-accent px-3 text-sm font-semibold text-white"
           >
-            📷 Scan barcode
+            Scan barcode
           </button>
-          <label className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-3 text-sm font-semibold dark:border-slate-700">
+          <label className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-[16px] bg-paper px-3 text-sm font-semibold text-ink">
             <input
               type="checkbox"
               className="size-4 accent-teal-600"
@@ -194,7 +193,7 @@ export function AddItemSheet({
           />
         ) : null}
 
-        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-mute">
           Name
         </label>
         <input
@@ -202,33 +201,33 @@ export function AddItemSheet({
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
           placeholder="e.g. Milk, bananas…"
-          className="mb-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none ring-teal-600 focus:ring-2 dark:border-slate-700 dark:bg-slate-800"
+          className="mb-1 min-h-14 w-full rounded-[16px] bg-paper px-4 text-base text-ink outline-none ring-accent focus:ring-2"
         />
         {autoActive ? (
-          <p className="mb-2 text-xs font-medium text-teal-700 dark:text-teal-300">
+          <p className="mb-2 text-xs font-medium text-accent">
             Auto category: {categoryLabel(detected)}
           </p>
         ) : null}
 
         {suggestions.length > 0 && (
-          <ul className="mb-3 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+          <ul className="mb-3 overflow-hidden rounded-[20px] bg-paper">
             {suggestions.map((s) => (
-              <li key={s.id}>
+              <li key={s.id} className="border-b border-ink/8 last:border-b-0">
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+                  className="flex min-h-[52px] w-full items-center justify-between px-4 text-left text-base"
                   onClick={() => {
                     addToWeek(s.id, { quantity, notes })
                     onClose()
                   }}
                 >
                   <span>
-                    <span className="font-medium">{s.name}</span>
+                    <span className="font-medium text-ink">{s.name}</span>
                     {s.brand ? (
-                      <span className="text-slate-500"> · {s.brand}</span>
+                      <span className="text-mute"> · {s.brand}</span>
                     ) : null}
                   </span>
-                  <span className="text-teal-600 font-semibold">+ Week</span>
+                  <span className="font-semibold text-accent">Add</span>
                 </button>
               </li>
             ))}
@@ -237,18 +236,18 @@ export function AddItemSheet({
 
         <div className="mb-3 grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-mute">
               Qty
             </label>
             <input
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               placeholder="2x"
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none ring-teal-600 focus:ring-2 dark:border-slate-700 dark:bg-slate-800"
+              className="min-h-12 w-full rounded-[16px] bg-paper px-4 text-base text-ink outline-none ring-accent focus:ring-2"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-mute">
               Category
             </label>
             <select
@@ -257,7 +256,7 @@ export function AddItemSheet({
                 setCategory(e.target.value as CategoryId)
                 setCategoryLocked(true)
               }}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-base outline-none ring-teal-600 focus:ring-2 dark:border-slate-700 dark:bg-slate-800"
+              className="min-h-12 w-full rounded-[16px] bg-paper px-3 text-base text-ink outline-none ring-accent focus:ring-2"
             >
               {CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -268,7 +267,7 @@ export function AddItemSheet({
             {categoryLocked ? (
               <button
                 type="button"
-                className="mt-1 text-left text-[11px] font-semibold text-teal-700 dark:text-teal-300"
+                className="mt-1 min-h-11 text-left text-[11px] font-semibold text-accent"
                 onClick={() => {
                   setCategoryLocked(false)
                   setCategory(detectCategoryFromName(name))
@@ -280,18 +279,18 @@ export function AddItemSheet({
           </div>
         </div>
 
-        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-mute">
           Notes
         </label>
         <input
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="organic, only if on special…"
-          className="mb-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none ring-teal-600 focus:ring-2 dark:border-slate-700 dark:bg-slate-800"
+          className="mb-3 min-h-12 w-full rounded-[16px] bg-paper px-4 text-base text-ink outline-none ring-accent focus:ring-2"
         />
 
         <details className="mb-4">
-          <summary className="cursor-pointer text-sm font-medium text-slate-500">
+          <summary className="cursor-pointer text-sm font-medium text-mute">
             More details
           </summary>
           <div className="mt-2 grid gap-2">
@@ -299,32 +298,32 @@ export function AddItemSheet({
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
               placeholder="Brand"
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base dark:border-slate-700 dark:bg-slate-800"
+              className="min-h-12 w-full rounded-[16px] bg-paper px-4 text-base text-ink"
             />
             <input
               value={sizeLabel}
               onChange={(e) => setSizeLabel(e.target.value)}
               placeholder="Size (e.g. 1L)"
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base dark:border-slate-700 dark:bg-slate-800"
+              className="min-h-12 w-full rounded-[16px] bg-paper px-4 text-base text-ink"
             />
             <input
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
               placeholder="Barcode"
               inputMode="numeric"
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base dark:border-slate-700 dark:bg-slate-800"
+              className="min-h-12 w-full rounded-[16px] bg-paper px-4 text-base text-ink"
             />
           </div>
         </details>
 
         {hint ? (
-          <p className="mb-3 text-sm text-amber-700 dark:text-amber-300">{hint}</p>
+          <p className="mb-3 text-sm text-danger">{hint}</p>
         ) : null}
 
         <button
           type="button"
           onClick={submit}
-          className="min-h-14 w-full rounded-2xl bg-slate-900 text-base font-bold text-white active:scale-[0.99] dark:bg-teal-600"
+          className="press min-h-14 w-full rounded-[16px] bg-accent text-base font-semibold text-white"
         >
           Save item
         </button>
