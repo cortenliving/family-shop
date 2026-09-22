@@ -41,9 +41,28 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        cacheId: 'family-shop-v3',
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff2,webmanifest}'],
         importScripts: ['sw-push.js'],
+        navigateFallback: null,
         runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'family-shop-html-v3',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 7 },
+            },
+          },
+          {
+            urlPattern: ({ url }) =>
+              url.pathname.startsWith('/api/') || url.hostname.endsWith('.workers.dev'),
+            handler: 'NetworkOnly',
+          },
           {
             urlPattern: /^https:\/\/world\.openfoodfacts\.org\/.*/i,
             handler: 'CacheFirst',
@@ -56,17 +75,7 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          {
-            urlPattern: /^https:\/\/family-shop-api\..*\.workers\.dev\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'family-shop-api',
-              networkTimeoutSeconds: 8,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 },
-            },
-          },
         ],
-        navigateFallback: '/index.html',
       },
       devOptions: {
         enabled: false,

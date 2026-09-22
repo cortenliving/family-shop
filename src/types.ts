@@ -32,6 +32,7 @@ export interface Family {
   code: string
   name: string
   createdAt: number
+  updatedAt?: number
 }
 
 export interface MasterItem {
@@ -62,7 +63,14 @@ export interface ShoppingItem {
   checked: boolean
   checkedAt?: number
   addedAt: number
+  updatedAt?: number
   addedBy?: string
+}
+
+export interface Tombstone {
+  id: string
+  kind: 'master' | 'shop'
+  deletedAt: number
 }
 
 export interface BarcodeCacheEntry {
@@ -96,6 +104,8 @@ export interface AppSnapshot {
   member: MemberProfile | null
   masterItems: MasterItem[]
   shoppingItems: ShoppingItem[]
+  tombstones?: Tombstone[]
+  updatedAt?: number
   barcodeCache: Record<string, BarcodeCacheEntry>
   theme: 'light' | 'dark' | 'system'
   weeklyReminder: boolean

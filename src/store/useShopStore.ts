@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { familyCode, uid } from '../lib/id'
-import { loadSnapshot, saveSnapshot } from '../lib/storage'
+import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/storage'
 import {
   broadcastLocalChange,
   connectRealtime,
@@ -22,9 +22,15 @@ import {
   usualShopCandidates,
 } from '../lib/recommendations'
 import {
+  applyRemoteSnapshot,
+  capTombstones,
   localHasExclusiveItems,
-  mergeMasterItems,
-  mergeShoppingItems,
+  toSyncPayload,
+  tombstonesMissingFrom,
+  withClearShop,
+  withDeleteMaster,
+  withDeleteShop,
+  type ListState,
 } from '../lib/mergeLists'
 import type {
   AppSnapshot,
@@ -36,6 +42,7 @@ import type {
   MemberProfile,
   ShoppingItem,
   TabId,
+  Tombstone,
 } from '../types'
 
 interface ShopState {
@@ -45,6 +52,8 @@ interface ShopState {
   familyMembers: FamilyMember[]
   masterItems: MasterItem[]
   shoppingItems: ShoppingItem[]
+  tombstones: Tombstone[]
+  updatedAt: number
   barcodeCache: Record<string, BarcodeCacheEntry>
   theme: 'light' | 'dark' | 'system'
   weeklyReminder: boolean
@@ -116,20 +125,44 @@ interface ShopState {
 
   startRealtime: () => () => void
   pullRemote: () => Promise<void>
+  resetDeviceList: () => Promise<void>
+}
+
+function listFrom(state: {
+  masterItems: MasterItem[]
+  shoppingItems: ShoppingItem[]
+  tombstones?: Tombstone[]
+  updatedAt?: number
+}): ListState {
+  return {
+    masterItems: state.masterItems,
+    shoppingItems: state.shoppingItems,
+    tombstones: state.tombstones ?? [],
+    updatedAt: state.updatedAt ?? 0,
+  }
 }
 
 function snapshotFrom(state: ShopState): AppSnapshot {
+  const lists = toSyncPayload(listFrom(state))
   return {
     version: 1,
-    family: state.family,
+    family: state.family ? { ...state.family, updatedAt: lists.updatedAt } : null,
     member: state.member,
-    masterItems: state.masterItems,
-    shoppingItems: state.shoppingItems,
+    masterItems: lists.masterItems,
+    shoppingItems: lists.shoppingItems,
+    tombstones: lists.tombstones,
+    updatedAt: lists.updatedAt,
     barcodeCache: state.barcodeCache,
     theme: state.theme,
     weeklyReminder: state.weeklyReminder,
     lastSyncedAt: state.lastSyncedAt,
   }
+}
+
+function commitNow(get: () => ShopState) {
+  markLocalMutation()
+  if (persistTimer) clearTimeout(persistTimer)
+  void get().persist()
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null
@@ -158,6 +191,8 @@ function applyRemoteFamilyLists(
     family: Family
     masterItems?: MasterItem[]
     shoppingItems?: ShoppingItem[]
+    tombstones?: Tombstone[]
+    updatedAt?: number
     members?: FamilyMember[]
   },
   set: (
@@ -171,30 +206,42 @@ function applyRemoteFamilyLists(
   const remoteMaster = data.masterItems ?? []
   const remoteShop = data.shoppingItems ?? []
   const local = get()
-
-  const mergedMaster = mergeMasterItems(local.masterItems, remoteMaster)
-  const mergedShop = mergeShoppingItems(local.shoppingItems, remoteShop)
+  const localList = listFrom(local)
+  const remoteList: ListState = {
+    masterItems: remoteMaster,
+    shoppingItems: remoteShop,
+    tombstones: capTombstones(data.tombstones ?? []),
+    updatedAt: Math.max(data.updatedAt ?? 0, data.family?.updatedAt ?? 0),
+  }
+  const merged = applyRemoteSnapshot(localList, remoteList)
   const hadExclusive = localHasExclusiveItems(
     local.masterItems,
     remoteMaster,
     local.shoppingItems,
     remoteShop,
+    merged.tombstones,
   )
+  const missingTombstones = tombstonesMissingFrom(localList.tombstones, remoteList.tombstones)
 
-  // Ignore pure remote replace while we're mid-edit / mid-push — still merge
-  // so we never drop the item the user just added.
+  // Tombstones drop deleted ids. An older remote snapshot cannot union them back.
   set({
     family: data.family,
-    masterItems: mergedMaster,
-    shoppingItems: mergedShop,
+    masterItems: merged.masterItems,
+    shoppingItems: merged.shoppingItems,
+    tombstones: merged.tombstones,
+    updatedAt: Math.max(merged.updatedAt, localList.updatedAt),
     lastSyncedAt: Date.now(),
     syncStatus: 'live',
     ...(data.members ? { familyMembers: data.members } : {}),
   })
   void saveSnapshot(snapshotFrom(get()))
 
-  if (hadExclusive || (remoteMaster.length === 0 && mergedMaster.length > 0)) {
-    if (opts?.recoverToast && remoteMaster.length === 0 && mergedMaster.length > 0) {
+  if (
+    missingTombstones ||
+    hadExclusive ||
+    (remoteMaster.length === 0 && merged.masterItems.length > 0)
+  ) {
+    if (opts?.recoverToast && remoteMaster.length === 0 && merged.masterItems.length > 0) {
       get().showToast('Restored products from this device to the cloud')
     }
     // Push the union so the cloud catches up
@@ -220,6 +267,8 @@ export const useShopStore = create<ShopState>((set, get) => ({
   familyMembers: [],
   masterItems: [],
   shoppingItems: [],
+  tombstones: [],
+  updatedAt: 0,
   barcodeCache: {},
   theme: 'system',
   weeklyReminder: false,
@@ -233,22 +282,26 @@ export const useShopStore = create<ShopState>((set, get) => ({
   hydrate: async () => {
     const snap = await loadSnapshot()
     if (snap) {
+      const cleaned = toSyncPayload(listFrom(snap))
       set({
         family: snap.family,
         member: snap.member,
-        masterItems: snap.masterItems ?? [],
-        shoppingItems: snap.shoppingItems ?? [],
+        masterItems: cleaned.masterItems,
+        shoppingItems: cleaned.shoppingItems,
+        tombstones: cleaned.tombstones,
+        updatedAt: snap.updatedAt ?? cleaned.updatedAt,
         barcodeCache: snap.barcodeCache ?? {},
         theme: snap.theme ?? 'system',
         weeklyReminder: snap.weeklyReminder ?? false,
         lastSyncedAt: snap.lastSyncedAt,
-        hydrated: true,
+        hydrated: false,
         syncStatus: hasRemoteApi() ? 'syncing' : 'local',
       })
       if (hasRemoteApi() && snap.family) {
-        void get().pullRemote()
+        await get().pullRemote()
         void get().refreshMembers()
       }
+      set({ hydrated: true })
     } else {
       set({
         hydrated: true,
@@ -280,7 +333,6 @@ export const useShopStore = create<ShopState>((set, get) => ({
       const snap = snapshotFrom(state)
       await saveSnapshot(snap)
       if (state.family) {
-        broadcastLocalChange(state.family.id)
         if (hasRemoteApi()) {
           set({ syncStatus: 'syncing' })
           const notify = state.pendingNotify
@@ -322,6 +374,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
             }
           }
         }
+        broadcastLocalChange(state.family.id)
       }
     } finally {
       persistInFlight = false
@@ -577,11 +630,8 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   deleteMasterItem: (id) => {
-    set({
-      masterItems: get().masterItems.filter((m) => m.id !== id),
-      shoppingItems: get().shoppingItems.filter((s) => s.masterItemId !== id),
-    })
-    schedulePersist(get)
+    set(withDeleteMaster(listFrom(get()), id, Date.now()))
+    commitNow(get)
   },
 
   toggleFrequent: (id) => {
@@ -703,10 +753,8 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   removeFromWeek: (shoppingItemId) => {
-    set({
-      shoppingItems: get().shoppingItems.filter((s) => s.id !== shoppingItemId),
-    })
-    schedulePersist(get)
+    set(withDeleteShop(listFrom(get()), shoppingItemId, Date.now()))
+    commitNow(get)
   },
 
   toggleChecked: (shoppingItemId) => {
@@ -739,23 +787,22 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   clearChecked: () => {
-    set({
-      shoppingItems: get().shoppingItems.filter((s) => !s.checked),
-    })
-    schedulePersist(get)
+    set(withClearShop(listFrom(get()), 'checked', Date.now()))
+    commitNow(get)
     get().showToast('Cleared bought items')
   },
 
   clearCurrentList: () => {
     const who = get().member?.displayName || 'Someone'
+    const next = withClearShop(listFrom(get()), 'all', Date.now())
     set({
-      shoppingItems: [],
+      ...next,
       pendingNotify: {
         title: get().family?.name || 'Family Shop',
         body: `${who} cleared this week’s list`,
       },
     })
-    schedulePersist(get)
+    commitNow(get)
     get().showToast('This week’s list cleared — master list kept')
   },
 
@@ -821,12 +868,12 @@ export const useShopStore = create<ShopState>((set, get) => ({
       bc.onmessage = () => {
         void loadSnapshot().then((snap) => {
           if (!snap || snap.family?.id !== family.id) return
+          const merged = applyRemoteSnapshot(listFrom(get()), listFrom(snap))
           set({
-            masterItems: mergeMasterItems(get().masterItems, snap.masterItems ?? []),
-            shoppingItems: mergeShoppingItems(
-              get().shoppingItems,
-              snap.shoppingItems ?? [],
-            ),
+            masterItems: merged.masterItems,
+            shoppingItems: merged.shoppingItems,
+            tombstones: merged.tombstones,
+            updatedAt: Math.max(merged.updatedAt, get().updatedAt),
           })
         })
       }
@@ -873,5 +920,39 @@ export const useShopStore = create<ShopState>((set, get) => ({
     } else {
       set({ syncStatus: 'error' })
     }
+  },
+
+  resetDeviceList: async () => {
+    const family = get().family
+    const member = get().member
+    const theme = get().theme
+    await clearSnapshot()
+    if ('caches' in window) {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((key) => caches.delete(key)))
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(regs.map((reg) => reg.unregister()))
+    }
+    if (family && hasRemoteApi()) {
+      const remote = await remotePullSnapshot(family.id)
+      if (remote) {
+        set({
+          family: remote.family,
+          member,
+          theme,
+          masterItems: remote.masterItems ?? [],
+          shoppingItems: remote.shoppingItems ?? [],
+          tombstones: capTombstones(remote.tombstones ?? []),
+          updatedAt: remote.updatedAt ?? remote.family?.updatedAt ?? 0,
+          barcodeCache: {},
+          familyMembers: remote.members ?? [],
+          syncStatus: 'live',
+        })
+        await saveSnapshot(snapshotFrom(get()))
+      }
+    }
+    window.location.reload()
   },
 }))

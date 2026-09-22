@@ -21,6 +21,7 @@ export function SettingsView() {
   const createFamily = useShopStore((s) => s.createFamily)
   const joinFamily = useShopStore((s) => s.joinFamily)
   const leaveFamily = useShopStore((s) => s.leaveFamily)
+  const resetDeviceList = useShopStore((s) => s.resetDeviceList)
   const setTheme = useShopStore((s) => s.setTheme)
   const setWeeklyReminder = useShopStore((s) => s.setWeeklyReminder)
   const setMemberName = useShopStore((s) => s.setMemberName)
@@ -174,6 +175,21 @@ export function SettingsView() {
                   Pull latest list from cloud
                 </button>
               ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    confirm(
+                      'Reset this phone’s copy and load the family list from the server?',
+                    )
+                  ) {
+                    void resetDeviceList()
+                  }
+                }}
+                className="min-h-12 rounded-2xl bg-amber-50 font-semibold text-amber-950 dark:bg-amber-950/40 dark:text-amber-50"
+              >
+                Reset this device list
+              </button>
               <button
                 type="button"
                 onClick={() => {

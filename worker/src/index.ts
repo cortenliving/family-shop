@@ -1,3 +1,5 @@
+import { capTombstones, tombstoneWins } from '../../src/lib/mergeLists'
+import type { Tombstone } from '../../src/types'
 import { lookupProduct } from './productLookup'
 import { sendWebPush } from './webpush'
 
@@ -55,6 +57,7 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
@@ -180,12 +183,45 @@ async function loadFamilyBundle(db: D1Database, familyId: string) {
       code: family.code,
       name: family.name,
       createdAt: family.createdAt,
+      updatedAt: await loadSyncUpdatedAt(db, familyId),
     },
     masterItems: (master.results ?? []).map(mapMaster),
     shoppingItems: (shopping.results ?? []).map(mapShop),
+    tombstones: await loadTombstones(db, familyId),
+    updatedAt: await loadSyncUpdatedAt(db, familyId),
     members: memberList,
     memberCount: memberList.length,
     activeCount: memberList.filter((m) => m.active).length,
+  }
+}
+
+async function loadTombstones(db: D1Database, familyId: string): Promise<Tombstone[]> {
+  try {
+    const rows = await db
+      .prepare('SELECT kind, item_id, deleted_at FROM tombstones WHERE family_id = ?')
+      .bind(familyId)
+      .all<{ kind: string; item_id: string; deleted_at: number }>()
+    return capTombstones(
+      (rows.results ?? []).map((r) => ({
+        id: r.item_id,
+        kind: r.kind === 'master' ? 'master' : 'shop',
+        deletedAt: r.deleted_at,
+      })),
+    )
+  } catch {
+    return []
+  }
+}
+
+async function loadSyncUpdatedAt(db: D1Database, familyId: string): Promise<number> {
+  try {
+    const row = await db
+      .prepare('SELECT updated_at FROM family_sync WHERE family_id = ?')
+      .bind(familyId)
+      .first<{ updated_at: number }>()
+    return row?.updated_at ?? 0
+  } catch {
+    return 0
   }
 }
 
@@ -420,8 +456,11 @@ export default {
             checked: boolean
             checkedAt?: number
             addedAt: number
+            updatedAt?: number
             addedBy?: string
           }>
+          tombstones?: Tombstone[]
+          updatedAt?: number
           notify?: {
             title?: string
             body?: string
@@ -445,12 +484,29 @@ export default {
 
         await upsertMember(env.DB, familyId, body.member)
 
-        const masterItems = body.masterItems ?? []
-        const shoppingItems = body.shoppingItems ?? []
+        const storedStones = await loadTombstones(env.DB, familyId)
+        const stones = capTombstones([
+          ...storedStones,
+          ...(body.tombstones ?? []),
+        ])
+        const masterItems = (body.masterItems ?? []).filter(
+          (m) => !tombstoneWins(stones, 'master', m.id, m.updatedAt || 0),
+        )
+        const masterIds = new Set(masterItems.map((m) => m.id))
+        const shoppingItems = (body.shoppingItems ?? []).filter(
+          (s) =>
+            masterIds.has(s.masterItemId) &&
+            !tombstoneWins(
+              stones,
+              'shop',
+              s.id,
+              Math.max(s.addedAt || 0, s.updatedAt || 0, s.checkedAt || 0),
+            ),
+        )
 
         // Never wipe a non-empty master library with an empty snapshot
-        // (common bug: empty device / failed client state overwriting the family).
-        if (masterItems.length === 0) {
+        // unless those rows are tombstoned deletes.
+        if (masterItems.length === 0 && !stones.some((t) => t.kind === 'master')) {
           const existing = await env.DB.prepare(
             'SELECT COUNT(*) as c FROM master_items WHERE family_id = ?',
           )
@@ -494,7 +550,17 @@ export default {
           env.DB.prepare('DELETE FROM master_items WHERE family_id = ?').bind(
             familyId,
           ),
+          env.DB.prepare('DELETE FROM tombstones WHERE family_id = ?').bind(familyId),
         ]
+        const tombstoneInserts: D1PreparedStatement[] = stones.map((t) =>
+          env.DB.prepare(
+            'INSERT INTO tombstones (family_id, kind, item_id, deleted_at) VALUES (?, ?, ?, ?)',
+          ).bind(familyId, t.kind, t.id, t.deletedAt),
+        )
+        const syncClock = env.DB.prepare(
+          `INSERT INTO family_sync (family_id, updated_at) VALUES (?, ?)
+           ON CONFLICT(family_id) DO UPDATE SET updated_at = excluded.updated_at`,
+        ).bind(familyId, Math.max(body.updatedAt ?? 0, Date.now()))
 
         const shopInserts: D1PreparedStatement[] = shoppingItems.map((s) =>
           env.DB.prepare(
@@ -564,6 +630,8 @@ export default {
             ...deleteStmts,
             ...masterInsertsWithLearning,
             ...shopInserts,
+            ...tombstoneInserts,
+            syncClock,
           ])
         } catch (primaryErr) {
           // Schema without learning columns (or transient D1 issue)
@@ -572,6 +640,8 @@ export default {
               ...deleteStmts,
               ...masterInsertsLegacy,
               ...shopInserts,
+              ...tombstoneInserts,
+              syncClock,
             ])
           } catch (legacyErr) {
             const message =

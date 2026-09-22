@@ -5,6 +5,7 @@ import type {
   MasterItem,
   MemberProfile,
   ShoppingItem,
+  Tombstone,
 } from '../types'
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || ''
@@ -13,6 +14,8 @@ export type FamilyBundle = {
   family: Family
   masterItems: MasterItem[]
   shoppingItems: ShoppingItem[]
+  tombstones?: Tombstone[]
+  updatedAt?: number
   members?: FamilyMember[]
   memberCount?: number
   activeCount?: number
@@ -92,10 +95,13 @@ export async function remotePushSnapshot(
   try {
     const res = await fetch(apiUrl(`/api/families/${snapshot.family.id}/sync`), {
       method: 'PUT',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         masterItems: snapshot.masterItems,
         shoppingItems: snapshot.shoppingItems,
+        tombstones: snapshot.tombstones ?? [],
+        updatedAt: snapshot.updatedAt ?? snapshot.family.updatedAt ?? 0,
         family: snapshot.family,
         member: snapshot.member
           ? {
@@ -168,7 +174,10 @@ export async function remotePullSnapshot(
 ): Promise<FamilyBundle | null> {
   if (!hasRemoteApi()) return null
   try {
-    const res = await fetch(apiUrl(`/api/families/${familyId}`))
+    const res = await fetch(apiUrl(`/api/families/${familyId}`), {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    })
     if (!res.ok) return null
     return await res.json()
   } catch {

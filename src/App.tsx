@@ -15,6 +15,7 @@ export default function App() {
   const startRealtime = useShopStore((s) => s.startRealtime)
   const joinFamily = useShopStore((s) => s.joinFamily)
   const family = useShopStore((s) => s.family)
+  const syncStatus = useShopStore((s) => s.syncStatus)
   const setTab = useShopStore((s) => s.setTab)
 
   useTheme()
@@ -55,6 +56,11 @@ export default function App() {
 
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      {family && syncStatus === 'error' ? (
+        <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 mx-auto w-[min(100%-1.5rem,32rem)] rounded-2xl bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-950 shadow-lg dark:bg-amber-950 dark:text-amber-50">
+          Not synced — changes saved on this phone
+        </div>
+      ) : null}
       <main className="mx-auto min-h-dvh max-w-lg pb-[calc(4.75rem+env(safe-area-inset-bottom))]">
         {tab === 'week' && <WeekView />}
         {tab === 'master' && <MasterView />}
